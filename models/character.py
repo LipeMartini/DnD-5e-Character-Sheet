@@ -7,6 +7,7 @@ from .subrace import Subrace, SubraceDatabase
 from .character_class import CharacterClass, ClassDatabase
 from .background import Background, BackgroundDatabase
 from .dice import DiceRoller
+from .inventory import Inventory
 
 @dataclass
 class Character:
@@ -34,11 +35,14 @@ class Character:
     
     skill_proficiencies: List[str] = field(default_factory=list)
     saving_throw_proficiencies: List[str] = field(default_factory=list)
+    weapon_proficiencies: List[str] = field(default_factory=list)
+    armor_proficiencies: List[str] = field(default_factory=list)
     
     languages: List[str] = field(default_factory=list)
     traits: List[str] = field(default_factory=list)
     
-    equipment: List[str] = field(default_factory=list)
+    equipment: List[str] = field(default_factory=list)  # Mantido para compatibilidade
+    inventory: Inventory = field(default_factory=Inventory)
     
     def __post_init__(self):
         self.update_derived_stats()
@@ -82,8 +86,10 @@ class Character:
         if self.character_class:
             self.saving_throw_proficiencies = self.character_class.saving_throw_proficiencies.copy()
         
+        # Calcula CA usando o sistema de inventário
+        self.armor_class = self.inventory.calculate_armor_class(self)
+        
         dex_modifier = self.stats.get_modifier('dexterity')
-        self.armor_class = 10 + dex_modifier
         self.initiative = dex_modifier
     
     def set_race(self, race_name: str):
@@ -101,17 +107,51 @@ class Character:
     def set_class(self, class_name: str):
         """Define a classe do personagem"""
         self.character_class = ClassDatabase.get_class(class_name)
-        self.update_derived_stats()
         
-        if self.character_class and self.max_hit_points == 0:
-            con_modifier = self.stats.get_modifier('constitution')
-            self.max_hit_points = self.character_class.hit_die + con_modifier
-            self.current_hit_points = self.max_hit_points
+        # Aplica proficiências de armas e armaduras da classe
+        if self.character_class:
+            self.weapon_proficiencies = self.character_class.weapon_proficiencies.copy()
+            self.armor_proficiencies = self.character_class.armor_proficiencies.copy()
+        
+        self.update_derived_stats()
+        self.recalculate_max_hp()
 
     def set_background(self, background_name: str):
         """Define o background do personagem"""
         self.background = BackgroundDatabase.get_all_backgrounds().get(background_name)
         self.update_derived_stats()
+    
+    def is_proficient_with_weapon(self, weapon) -> bool:
+        """Verifica se o personagem é proficiente com uma arma"""
+        # Verifica proficiência por nome específico
+        if weapon.name in self.weapon_proficiencies:
+            return True
+        
+        # Verifica proficiência por categoria
+        for prof in self.weapon_proficiencies:
+            # Simple weapons
+            if prof.lower() == "simple weapons":
+                simple_weapons = ["Club", "Dagger", "Greatclub", "Handaxe", "Javelin", 
+                                "Light Hammer", "Mace", "Quarterstaff", "Sickle", "Spear",
+                                "Light Crossbow", "Dart", "Shortbow", "Sling"]
+                if weapon.name in simple_weapons:
+                    return True
+            
+            # Martial weapons
+            elif prof.lower() == "martial weapons":
+                martial_weapons = ["Battleaxe", "Flail", "Glaive", "Greataxe", "Greatsword",
+                                  "Halberd", "Lance", "Longsword", "Maul", "Morningstar",
+                                  "Pike", "Rapier", "Scimitar", "Shortsword", "Trident",
+                                  "War Pick", "Warhammer", "Whip", "Blowgun", "Hand Crossbow",
+                                  "Heavy Crossbow", "Longbow", "Net"]
+                if weapon.name in martial_weapons:
+                    return True
+            
+            # Proficiência específica (ex: "Longswords", "Rapiers")
+            elif weapon.name.lower() in prof.lower() or prof.lower() in weapon.name.lower():
+                return True
+        
+        return False
     
     def roll_initiative(self) -> tuple[int, int]:
         """Rola iniciativa"""
@@ -138,18 +178,94 @@ class Character:
             modifier += self.proficiency_bonus
         return DiceRoller.roll_d20(modifier)
     
-    def level_up(self):
-        """Sobe de nível"""
+    def recalculate_max_hp(self):
+        """Recalcula HP máximo baseado no nível e constituição"""
+        if not self.character_class:
+            return
+        
+        con_modifier = self.stats.get_modifier('constitution')
+        
+        # Nível 1: HP máximo do dado + CON
+        if self.level == 1:
+            self.max_hit_points = self.character_class.hit_die + con_modifier
+            self.current_hit_points = self.max_hit_points
+        else:
+            # Níveis 2+: Mantém HP atual se já foi calculado
+            # (não recalcula automaticamente para não sobrescrever rolagens)
+            if self.max_hit_points == 0:
+                # Se ainda não tem HP, calcula usando média
+                avg_per_level = (self.character_class.hit_die // 2) + 1
+                self.max_hit_points = self.character_class.hit_die + con_modifier
+                self.max_hit_points += (self.level - 1) * (avg_per_level + con_modifier)
+                self.current_hit_points = self.max_hit_points
+    
+    def take_damage(self, damage: int):
+        """Aplica dano ao personagem"""
+        if damage < 0:
+            return
+        
+        # Primeiro, remove HP temporário
+        if self.temporary_hit_points > 0:
+            if damage <= self.temporary_hit_points:
+                self.temporary_hit_points -= damage
+                return
+            else:
+                damage -= self.temporary_hit_points
+                self.temporary_hit_points = 0
+        
+        # Depois, remove HP atual
+        self.current_hit_points -= damage
+        self.current_hit_points = max(0, self.current_hit_points)
+    
+    def heal(self, healing: int):
+        """Cura o personagem"""
+        if healing < 0:
+            return
+        
+        self.current_hit_points += healing
+        self.current_hit_points = min(self.current_hit_points, self.max_hit_points)
+    
+    def add_temp_hp(self, temp_hp: int):
+        """Adiciona HP temporário (não acumula, pega o maior)"""
+        if temp_hp > self.temporary_hit_points:
+            self.temporary_hit_points = temp_hp
+    
+    def short_rest(self):
+        """Descanso curto - pode usar dados de vida para curar"""
+        # Implementação básica - apenas retorna informação
+        return f"Você tem {self.level} dados de vida (d{self.character_class.hit_die if self.character_class else 6})"
+    
+    def long_rest(self):
+        """Descanso longo - recupera HP e metade dos dados de vida"""
+        self.current_hit_points = self.max_hit_points
+        self.temporary_hit_points = 0
+        return "HP completamente restaurado!"
+    
+    def level_up(self, use_average: bool = False):
+        """Sobe de nível
+        
+        Args:
+            use_average: Se True, usa média do dado de vida. Se False, rola o dado.
+        """
         self.level += 1
         self.update_derived_stats()
         
         if self.character_class:
             con_modifier = self.stats.get_modifier('constitution')
-            hp_gain, _ = DiceRoller.roll(f"1d{self.character_class.hit_die}")
+            
+            if use_average:
+                # Média arredondada para cima: (dado / 2) + 1
+                hp_gain = (self.character_class.hit_die // 2) + 1
+            else:
+                # Rola o dado de vida
+                hp_gain, _ = DiceRoller.roll(f"1d{self.character_class.hit_die}")
+            
             hp_gain += con_modifier
-            hp_gain = max(1, hp_gain)
+            hp_gain = max(1, hp_gain)  # Mínimo de 1 HP por nível
             self.max_hit_points += hp_gain
             self.current_hit_points = self.max_hit_points
+            return hp_gain
+        return 0
     
     def to_dict(self) -> dict:
         """Converte personagem para dicionário (para salvar)"""
@@ -173,9 +289,12 @@ class Character:
             'proficiency_bonus': self.proficiency_bonus,
             'skill_proficiencies': self.skill_proficiencies,
             'saving_throw_proficiencies': self.saving_throw_proficiencies,
+            'weapon_proficiencies': self.weapon_proficiencies,
+            'armor_proficiencies': self.armor_proficiencies,
             'languages': self.languages,
             'traits': self.traits,
             'equipment': self.equipment,
+            'inventory': self.inventory.to_dict(),
         }
     
     @classmethod
@@ -214,9 +333,14 @@ class Character:
         char.proficiency_bonus = data.get('proficiency_bonus', 2)
         char.skill_proficiencies = data.get('skill_proficiencies', [])
         char.saving_throw_proficiencies = data.get('saving_throw_proficiencies', [])
+        char.weapon_proficiencies = data.get('weapon_proficiencies', [])
+        char.armor_proficiencies = data.get('armor_proficiencies', [])
         char.languages = data.get('languages', [])
         char.traits = data.get('traits', [])
         char.equipment = data.get('equipment', [])
+        
+        if data.get('inventory'):
+            char.inventory = Inventory.from_dict(data['inventory'])
         
         return char
     

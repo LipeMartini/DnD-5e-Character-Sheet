@@ -1,4 +1,5 @@
-Primeiro: Sistema de HP dinâmico (você vai aprender sobre eventos, atualização de UI)
+CHECK --- Primeiro: Sistema de HP dinâmico (você vai aprender sobre eventos, atualização de UI)
+Primeiro-2: Hover tips (dar um hover com o mouse e aparecer uma tip que explica o que faz cada feature, principalmente para traços e características)
 Segundo: Equipamento básico (trabalhar com listas, CRUD simples)
 Terceiro: Sistema de XP e Level Up (lógica de negócio mais complexa)
 Quarto: Ataques e armas (integração com sistema de dados)

@@ -1,15 +1,16 @@
-from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QFormLayout, 
+from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QFormLayout,
                              QLineEdit, QComboBox, QSpinBox, QPushButton, 
-                             QGroupBox, QLabel, QListWidget, QMessageBox, QScrollArea)
-from PyQt6.QtCore import pyqtSignal
+                             QGroupBox, QLabel, QListWidget, QMessageBox, QScrollArea, QWidget)
+from PyQt6.QtCore import Qt
 from models import Character, RaceDatabase, SubraceDatabase, ClassDatabase, BackgroundDatabase, DiceRoller
 
-class CharacterCreationTab(QWidget):
-    character_updated = pyqtSignal()
-    
-    def __init__(self, character: Character):
-        super().__init__()
-        self.character = character
+class CharacterCreationDialog(QDialog):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.character = Character()
+        self.setWindowTitle("Criar Novo Personagem")
+        self.setModal(True)
+        self.resize(900, 700)
         self.init_ui()
     
     def init_ui(self):
@@ -23,11 +24,12 @@ class CharacterCreationTab(QWidget):
         
         layout = QVBoxLayout(scroll_widget)
         
+        # Informações Básicas
         basic_group = QGroupBox("Informações Básicas")
         basic_layout = QFormLayout()
         
         self.name_input = QLineEdit()
-        self.name_input.textChanged.connect(self.update_character)
+        self.name_input.setPlaceholderText("Digite o nome do personagem")
         basic_layout.addRow("Nome:", self.name_input)
         
         self.race_combo = QComboBox()
@@ -37,10 +39,9 @@ class CharacterCreationTab(QWidget):
         basic_layout.addRow("Raça:", self.race_combo)
         
         self.subrace_combo = QComboBox()
-        # NÃO adicione itens aqui - será preenchido dinamicamente
         self.subrace_combo.currentTextChanged.connect(self.on_subrace_changed)
         basic_layout.addRow("Subraça:", self.subrace_combo)
-
+        
         self.class_combo = QComboBox()
         classes = list(ClassDatabase.get_all_classes().keys())
         self.class_combo.addItems(classes)
@@ -53,41 +54,39 @@ class CharacterCreationTab(QWidget):
         self.background_combo.currentTextChanged.connect(self.on_background_changed)
         basic_layout.addRow("Antecedente:", self.background_combo)
         
-        self.level_spin = QSpinBox()
-        self.level_spin.setMinimum(1)
-        self.level_spin.setMaximum(20)
-        self.level_spin.setValue(1)
-        self.level_spin.valueChanged.connect(self.update_character)
-        basic_layout.addRow("Nível:", self.level_spin)
-        
         self.alignment_combo = QComboBox()
         alignments = ["Lawful Good", "Neutral Good", "Chaotic Good",
                      "Lawful Neutral", "Neutral", "Chaotic Neutral",
                      "Lawful Evil", "Neutral Evil", "Chaotic Evil"]
         self.alignment_combo.addItems(alignments)
-        self.alignment_combo.currentTextChanged.connect(self.update_character)
         basic_layout.addRow("Alinhamento:", self.alignment_combo)
         
         basic_group.setLayout(basic_layout)
         layout.addWidget(basic_group)
         
+        # Atributos
         stats_group = QGroupBox("Atributos")
         stats_layout = QVBoxLayout()
         
-        roll_btn_layout = QHBoxLayout()
-        self.roll_stats_btn = QPushButton("Rolar Atributos (4d6 manter 3 maiores)")
-        self.roll_stats_btn.clicked.connect(self.roll_all_stats)
-        roll_btn_layout.addWidget(self.roll_stats_btn)
-        stats_layout.addLayout(roll_btn_layout)
+        roll_buttons = QHBoxLayout()
+        roll_all_btn = QPushButton("Rolar Todos os Atributos")
+        roll_all_btn.clicked.connect(self.roll_all_stats)
+        roll_buttons.addWidget(roll_all_btn)
+        stats_layout.addLayout(roll_buttons)
         
-        stats_form = QFormLayout()
-        
+        stats_grid = QFormLayout()
         self.stat_inputs = {}
-        stat_names = ['strength', 'dexterity', 'constitution', 'intelligence', 'wisdom', 'charisma']
-        stat_labels = ['Força (STR)', 'Destreza (DEX)', 'Constituição (CON)', 
-                      'Inteligência (INT)', 'Sabedoria (WIS)', 'Carisma (CHA)']
         
-        for stat_name, label in zip(stat_names, stat_labels):
+        stat_names = {
+            'strength': 'Força',
+            'dexterity': 'Destreza',
+            'constitution': 'Constituição',
+            'intelligence': 'Inteligência',
+            'wisdom': 'Sabedoria',
+            'charisma': 'Carisma'
+        }
+        
+        for stat_name, pt_name in stat_names.items():
             stat_widget = QWidget()
             stat_layout = QHBoxLayout(stat_widget)
             stat_layout.setContentsMargins(0, 0, 0, 0)
@@ -96,29 +95,31 @@ class CharacterCreationTab(QWidget):
             spin.setMinimum(1)
             spin.setMaximum(20)
             spin.setValue(10)
-            spin.valueChanged.connect(self.update_character)
+            spin.valueChanged.connect(self.update_stats_display)
             stat_layout.addWidget(spin)
-            
-            roll_btn = QPushButton("🎲")
-            roll_btn.setMaximumWidth(40)
-            roll_btn.clicked.connect(lambda checked, s=stat_name: self.roll_single_stat(s))
-            stat_layout.addWidget(roll_btn)
             
             modifier_label = QLabel("(+0)")
             modifier_label.setMinimumWidth(50)
             stat_layout.addWidget(modifier_label)
             
+            roll_btn = QPushButton("Rolar")
+            roll_btn.clicked.connect(lambda checked, s=stat_name: self.roll_single_stat(s))
+            stat_layout.addWidget(roll_btn)
+            
+            stat_layout.addStretch()
+            
+            stats_grid.addRow(f"{pt_name}:", stat_widget)
+            
             self.stat_inputs[stat_name] = {
                 'spin': spin,
                 'modifier': modifier_label
             }
-            
-            stats_form.addRow(label, stat_widget)
         
-        stats_layout.addLayout(stats_form)
+        stats_layout.addLayout(stats_grid)
         stats_group.setLayout(stats_layout)
         layout.addWidget(stats_group)
         
+        # Perícias
         skills_group = QGroupBox("Proficiências em Perícias")
         skills_layout = QVBoxLayout()
         
@@ -127,7 +128,6 @@ class CharacterCreationTab(QWidget):
         
         self.skills_list = QListWidget()
         self.skills_list.setSelectionMode(QListWidget.SelectionMode.MultiSelection)
-        self.skills_list.itemSelectionChanged.connect(self.update_character)
         skills_layout.addWidget(self.skills_list)
         
         self.subrace_skills_label = QLabel("Perícias da Subraça:")
@@ -137,7 +137,6 @@ class CharacterCreationTab(QWidget):
         self.subrace_skills_list = QListWidget()
         self.subrace_skills_list.setSelectionMode(QListWidget.SelectionMode.MultiSelection)
         self.subrace_skills_list.setVisible(False)
-        self.subrace_skills_list.itemSelectionChanged.connect(self.update_character)
         skills_layout.addWidget(self.subrace_skills_list)
 
         self.background_skills_info = QLabel("Perícias do Antecedente: Nenhum")
@@ -148,7 +147,19 @@ class CharacterCreationTab(QWidget):
         skills_group.setLayout(skills_layout)
         layout.addWidget(skills_group)
         
-        layout.addStretch()
+        # Botões de ação
+        button_layout = QHBoxLayout()
+        
+        create_btn = QPushButton("Criar Personagem")
+        create_btn.clicked.connect(self.create_character)
+        create_btn.setStyleSheet("font-weight: bold; padding: 10px;")
+        button_layout.addWidget(create_btn)
+        
+        cancel_btn = QPushButton("Cancelar")
+        cancel_btn.clicked.connect(self.reject)
+        button_layout.addWidget(cancel_btn)
+        
+        layout.addLayout(button_layout)
     
     def roll_single_stat(self, stat_name: str):
         total, rolls = DiceRoller.roll_ability_score()
@@ -183,35 +194,29 @@ class CharacterCreationTab(QWidget):
         if race_name:
             self.character.set_race(race_name)
             self.character.set_subrace('None')
-            # Atualizar subraças disponíveis
             self.subrace_combo.clear()
             subraces = SubraceDatabase.get_subraces_for_race(race_name)
             if subraces:
                 self.subrace_combo.addItems(list(subraces.keys()))
             self.update_stats_display()
-            self.character_updated.emit()
     
     def on_subrace_changed(self, subrace_name: str):
         if subrace_name:
             self.character.set_subrace(subrace_name)
             self.update_stats_display()
             self.update_skills_list()
-            self.character_updated.emit()
     
     def on_class_changed(self, class_name: str):
         if class_name:
             self.character.set_class(class_name)
             self.update_skills_list()
-            self.character_updated.emit()
     
     def on_background_changed(self, background_name: str):
         if background_name:
             self.character.set_background(background_name)
             self.update_skills_list()
-            self.character_updated.emit()
     
     def update_skills_list(self):
-        # Atualizar perícias da classe
         self.skills_list.clear()
         if self.character.character_class:
             available_skills = self.character.character_class.available_skills
@@ -222,14 +227,11 @@ class CharacterCreationTab(QWidget):
                 f"Selecione {max_skills} perícias da classe:"
             )
         
-        # Atualizar perícias da subraça (se houver)
         self.subrace_skills_list.clear()
         if self.character.subrace and self.character.subrace.skill_proficiencies_count > 0:
-            # Mostrar lista de perícias da subraça
             self.subrace_skills_label.setVisible(True)
             self.subrace_skills_list.setVisible(True)
             
-            # Lista completa de todas as perícias disponíveis
             all_skills = [
                 'Acrobatics', 'Animal Handling', 'Arcana', 'Athletics', 'Deception',
                 'History', 'Insight', 'Intimidation', 'Investigation', 'Medicine',
@@ -243,11 +245,9 @@ class CharacterCreationTab(QWidget):
                 f"Selecione {subrace_max} perícias da subraça ({self.character.subrace.name}):"
             )
         else:
-            # Esconder lista de perícias da subraça
             self.subrace_skills_label.setVisible(False)
             self.subrace_skills_list.setVisible(False)
         
-        # Atualizar informação de perícias do background
         if self.character.background:
             bg_skills = ", ".join(self.character.background.skill_proficiencies)
             self.background_skills_info.setText(
@@ -263,9 +263,22 @@ class CharacterCreationTab(QWidget):
             sign = '+' if modifier >= 0 else ''
             widgets['modifier'].setText(f"({sign}{modifier})")
     
-    def update_character(self):
+    def create_character(self):
+        # Validações
+        if not self.name_input.text().strip():
+            QMessageBox.warning(self, "Aviso", "Por favor, digite um nome para o personagem.")
+            return
+        
+        if not self.race_combo.currentText():
+            QMessageBox.warning(self, "Aviso", "Por favor, selecione uma raça.")
+            return
+        
+        if not self.class_combo.currentText():
+            QMessageBox.warning(self, "Aviso", "Por favor, selecione uma classe.")
+            return
+        
+        # Atualizar personagem com dados finais
         self.character.name = self.name_input.text()
-        self.character.level = self.level_spin.value()
         self.character.alignment = self.alignment_combo.currentText()
         
         for stat_name, widgets in self.stat_inputs.items():
@@ -278,11 +291,11 @@ class CharacterCreationTab(QWidget):
         selected_class_skills = [item.text() for item in self.skills_list.selectedItems()]
         if self.character.character_class:
             max_skills = self.character.character_class.skill_proficiencies_count
-            if len(selected_class_skills) > max_skills:
+            if len(selected_class_skills) != max_skills:
                 QMessageBox.warning(
                     self,
                     "Aviso",
-                    f"Você pode selecionar no máximo {max_skills} perícias da classe."
+                    f"Você deve selecionar exatamente {max_skills} perícias da classe."
                 )
                 return
         
@@ -290,73 +303,27 @@ class CharacterCreationTab(QWidget):
         selected_subrace_skills = [item.text() for item in self.subrace_skills_list.selectedItems()]
         if self.character.subrace and self.character.subrace.skill_proficiencies_count > 0:
             max_subrace_skills = self.character.subrace.skill_proficiencies_count
-            if len(selected_subrace_skills) > max_subrace_skills:
+            if len(selected_subrace_skills) != max_subrace_skills:
                 QMessageBox.warning(
                     self,
                     "Aviso",
-                    f"Você pode selecionar no máximo {max_subrace_skills} perícias da subraça."
+                    f"Você deve selecionar exatamente {max_subrace_skills} perícias da subraça."
                 )
                 return
         
-        # Adicionar perícias do background (automáticas)
+        # Adicionar perícias do background
         background_skills = []
         if self.character.background:
             background_skills = self.character.background.skill_proficiencies.copy()
         
-        # Combinar perícias de classe, subraça e background
+        # Combinar todas as perícias
         self.character.skill_proficiencies = selected_class_skills + selected_subrace_skills + background_skills
         
-        self.update_stats_display()
         self.character.update_derived_stats()
-        self.character_updated.emit()
+        
+        # Sucesso!
+        self.accept()
     
-    def set_character(self, character: Character):
-        self.character = character
-        
-        self.name_input.setText(character.name)
-        self.level_spin.setValue(character.level)
-        
-        if character.background:
-            index = self.background_combo.findText(character.background.name)
-            if index >= 0:
-                self.background_combo.setCurrentIndex(index)
-        
-        if character.alignment:
-            index = self.alignment_combo.findText(character.alignment)
-            if index >= 0:
-                self.alignment_combo.setCurrentIndex(index)
-        
-        if character.race:
-            index = self.race_combo.findText(character.race.name)
-            if index >= 0:
-                self.race_combo.setCurrentIndex(index)
-        
-        if character.character_class:
-            index = self.class_combo.findText(character.character_class.name)
-            if index >= 0:
-                self.class_combo.setCurrentIndex(index)
-        
-        if character.subrace:
-            index = self.subrace_combo.findText(character.subrace.name)
-            if index >= 0:
-                self.subrace_combo.setCurrentIndex(index)
-        
-        for stat_name, widgets in self.stat_inputs.items():
-            value = getattr(character.stats, stat_name)
-            widgets['spin'].setValue(value)
-        
-        self.update_stats_display()
-        self.update_skills_list()
-        
-        # Restaurar seleção de perícias da classe
-        for i in range(self.skills_list.count()):
-            item = self.skills_list.item(i)
-            if item.text() in character.skill_proficiencies:
-                item.setSelected(True)
-        
-        # Restaurar seleção de perícias da subraça
-        for i in range(self.subrace_skills_list.count()):
-            item = self.subrace_skills_list.item(i)
-            if item.text() in character.skill_proficiencies:
-                item.setSelected(True)
-        
+    def get_character(self):
+        """Retorna o personagem criado"""
+        return self.character

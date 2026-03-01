@@ -14,9 +14,12 @@ class Subrace:
     def to_dict(self) -> dict:
         return {
             'name': self.name,
+            'parent_race': self.parent_race,
             'ability_bonuses': self.ability_bonuses,
             'traits': self.traits,
-            'skillProficiencies': self.skillProficiencies,
+            'skill_proficiencies_count': self.skill_proficiencies_count,
+            'speed': self.speed,
+            'languages': self.languages,
         }
     
     @classmethod

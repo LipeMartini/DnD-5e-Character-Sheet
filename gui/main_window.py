@@ -1,10 +1,9 @@
 from PyQt6.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, 
-                             QTabWidget, QPushButton, QFileDialog, QMessageBox)
+                             QPushButton, QFileDialog, QMessageBox)
 from PyQt6.QtCore import Qt
 from models import Character
-from .character_creation_tab import CharacterCreationTab
+from .character_creation_dialog import CharacterCreationDialog
 from .character_sheet_tab import CharacterSheetTab
-from .dice_roller_tab import DiceRollerTab
 
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -39,24 +38,56 @@ class MainWindow(QMainWindow):
         
         main_layout.addLayout(button_layout)
         
-        self.tabs = QTabWidget()
-        
-        self.creation_tab = CharacterCreationTab(self.character)
-        self.creation_tab.character_updated.connect(self.on_character_updated)
-        self.tabs.addTab(self.creation_tab, "Criação de Personagem")
-        
         self.sheet_tab = CharacterSheetTab(self.character)
-        self.tabs.addTab(self.sheet_tab, "Ficha Completa")
+        self.sheet_tab.character_updated.connect(self.on_character_updated)
         
-        self.dice_tab = DiceRollerTab(self.character)
-        self.tabs.addTab(self.dice_tab, "Rolagem de Dados")
+        main_layout.addWidget(self.sheet_tab)
         
-        main_layout.addWidget(self.tabs)
+        # Mostrar diálogo de boas-vindas ao iniciar se não houver personagem
+        if not self.character.name:
+            self.show_welcome_dialog()
     
     def on_character_updated(self):
-        """Atualiza todas as abas quando o personagem é modificado"""
+        """Atualiza a ficha quando o personagem é modificado"""
         self.sheet_tab.update_display()
-        self.dice_tab.update_character(self.character)
+    
+    def show_welcome_dialog(self):
+        """Mostra diálogo de boas-vindas para escolher entre criar ou carregar personagem"""
+        msg = QMessageBox(self)
+        msg.setWindowTitle("Bem-vindo ao D&D 5e Character Builder!")
+        msg.setText("O que você gostaria de fazer?")
+        msg.setInformativeText("Escolha uma opção para começar:")
+        
+        create_btn = msg.addButton("Criar Novo Personagem", QMessageBox.ButtonRole.AcceptRole)
+        load_btn = msg.addButton("Carregar Ficha Existente", QMessageBox.ButtonRole.AcceptRole)
+        
+        msg.exec()
+        clicked = msg.clickedButton()
+        
+        if clicked == create_btn:
+            self.show_character_creation()
+        elif clicked == load_btn:
+            self.load_character()
+            # Se não carregou nenhum personagem, mostra criação
+            if not self.character.name:
+                self.show_character_creation()
+    
+    def show_character_creation(self):
+        """Mostra o diálogo de criação de personagem"""
+        dialog = CharacterCreationDialog(self)
+        if dialog.exec():
+            self.character = dialog.get_character()
+            self.sheet_tab.set_character(self.character)
+            self.on_character_updated()
+            QMessageBox.information(
+                self,
+                "Personagem Criado!",
+                f"Bem-vindo, {self.character.name}!\n\n"
+                f"Raça: {self.character.race.name if self.character.race else 'N/A'}\n"
+                f"Classe: {self.character.character_class.name if self.character.character_class else 'N/A'}\n"
+                f"Nível: {self.character.level}\n"
+                f"HP: {self.character.max_hit_points}"
+            )
     
     def new_character(self):
         reply = QMessageBox.question(
@@ -67,11 +98,7 @@ class MainWindow(QMainWindow):
         )
         
         if reply == QMessageBox.StandardButton.Yes:
-            self.character = Character()
-            self.creation_tab.set_character(self.character)
-            self.sheet_tab.set_character(self.character)
-            self.dice_tab.update_character(self.character)
-            self.on_character_updated()
+            self.show_character_creation()
     
     def save_character(self):
         if not self.character.name:
@@ -103,10 +130,7 @@ class MainWindow(QMainWindow):
         if filepath:
             try:
                 self.character = Character.load_from_file(filepath)
-                self.creation_tab.set_character(self.character)
                 self.sheet_tab.set_character(self.character)
-                self.dice_tab.update_character(self.character)
                 self.on_character_updated()
-                QMessageBox.information(self, "Sucesso", "Ficha carregada com sucesso!")
             except Exception as e:
                 QMessageBox.critical(self, "Erro", f"Erro ao carregar ficha:\n{str(e)}")
