@@ -123,8 +123,44 @@ class Character:
     
     def is_proficient_with_weapon(self, weapon) -> bool:
         """Verifica se o personagem é proficiente com uma arma"""
-        # Verifica proficiência por nome específico
-        if weapon.name in self.weapon_proficiencies:
+        # Mapeamento de nomes em português para inglês
+        weapon_name_map = {
+            'Adaga': 'Dagger',
+            'Espada Curta': 'Shortsword',
+            'Espada Longa': 'Longsword',
+            'Machado de Batalha': 'Battleaxe',
+            'Martelo de Guerra': 'Warhammer',
+            'Espada Grande': 'Greatsword',
+            'Machado Grande': 'Greataxe',
+            'Arco Curto': 'Shortbow',
+            'Arco Longo': 'Longbow',
+            'Besta Leve': 'Light Crossbow',
+            'Cajado': 'Quarterstaff',
+            'Lança': 'Spear',
+            'Clava': 'Club',
+            'Maça': 'Mace',
+            'Rapieira': 'Rapier',
+            'Cimitarra': 'Scimitar',
+            'Tridente': 'Trident',
+            'Alabarda': 'Halberd',
+            'Glaive': 'Glaive',
+            'Lança de Cavalaria': 'Lance',
+            'Mangual': 'Flail',
+            'Estrela da Manhã': 'Morningstar',
+            'Pique': 'Pike',
+            'Malho': 'Maul',
+            'Chicote': 'Whip',
+            'Besta de Mão': 'Hand Crossbow',
+            'Besta Pesada': 'Heavy Crossbow',
+            'Rede': 'Net',
+            'Zarabatana': 'Blowgun',
+        }
+        
+        # Obtém o nome em inglês se existir mapeamento
+        weapon_name_en = weapon_name_map.get(weapon.name, weapon.name)
+        
+        # Verifica proficiência por nome específico (português ou inglês)
+        if weapon.name in self.weapon_proficiencies or weapon_name_en in self.weapon_proficiencies:
             return True
         
         # Verifica proficiência por categoria
@@ -134,7 +170,7 @@ class Character:
                 simple_weapons = ["Club", "Dagger", "Greatclub", "Handaxe", "Javelin", 
                                 "Light Hammer", "Mace", "Quarterstaff", "Sickle", "Spear",
                                 "Light Crossbow", "Dart", "Shortbow", "Sling"]
-                if weapon.name in simple_weapons:
+                if weapon_name_en in simple_weapons:
                     return True
             
             # Martial weapons
@@ -144,11 +180,13 @@ class Character:
                                   "Pike", "Rapier", "Scimitar", "Shortsword", "Trident",
                                   "War Pick", "Warhammer", "Whip", "Blowgun", "Hand Crossbow",
                                   "Heavy Crossbow", "Longbow", "Net"]
-                if weapon.name in martial_weapons:
+                if weapon_name_en in martial_weapons:
                     return True
             
             # Proficiência específica (ex: "Longswords", "Rapiers")
             elif weapon.name.lower() in prof.lower() or prof.lower() in weapon.name.lower():
+                return True
+            elif weapon_name_en.lower() in prof.lower() or prof.lower() in weapon_name_en.lower():
                 return True
         
         return False

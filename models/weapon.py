@@ -89,7 +89,7 @@ COMMON_WEAPONS = {
     'Espada Longa': Weapon('Espada Longa', '1d8', 'slashing', ['versatile'], 'melee', 'strength'),
     'Machado de Batalha': Weapon('Machado de Batalha', '1d8', 'slashing', ['versatile'], 'melee', 'strength'),
     'Martelo de Guerra': Weapon('Martelo de Guerra', '1d8', 'bludgeoning', ['versatile'], 'melee', 'strength'),
-    'Montante': Weapon('Montante', '2d6', 'slashing', ['heavy', 'two-handed'], 'melee', 'strength'),
+    'Espada Grande': Weapon('Espada Grande', '2d6', 'slashing', ['heavy', 'two-handed'], 'melee', 'strength'),
     'Machado Grande': Weapon('Machado Grande', '1d12', 'slashing', ['heavy', 'two-handed'], 'melee', 'strength'),
     'Arco Curto': Weapon('Arco Curto', '1d6', 'piercing', ['ammunition', 'two-handed'], 'ranged', 'dexterity'),
     'Arco Longo': Weapon('Arco Longo', '1d8', 'piercing', ['ammunition', 'heavy', 'two-handed'], 'ranged', 'dexterity'),

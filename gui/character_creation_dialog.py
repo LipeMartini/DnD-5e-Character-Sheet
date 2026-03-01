@@ -286,6 +286,7 @@ class CharacterCreationDialog(QDialog):
             setattr(self.character.base_stats, stat_name, value)
         
         self.character.recalculate_stats()
+        self.character.recalculate_max_hp()  # Calcula HP com o modificador de CON correto
         
         # Validar perícias da classe
         selected_class_skills = [item.text() for item in self.skills_list.selectedItems()]

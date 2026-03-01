@@ -6,6 +6,7 @@ from PyQt6.QtGui import QFont, QPalette, QColor
 from models import Character
 from .dice_history_window import DiceHistoryWindow
 from .inventory_window import InventoryWindow
+from .advanced_edit_window import AdvancedEditWindow
 
 class CharacterSheetTab(QWidget):
     character_updated = pyqtSignal()
@@ -14,6 +15,11 @@ class CharacterSheetTab(QWidget):
         super().__init__()
         self.character = character
         self.dice_history = DiceHistoryWindow()
+        
+        # Estado de vantagem/desvantagem
+        self.advantage_active = False
+        self.disadvantage_active = False
+        
         self.init_ui()
         self.apply_theme()
     
@@ -163,17 +169,21 @@ class CharacterSheetTab(QWidget):
         
         layout.addLayout(top_row)
         
-        # ========== LINHA MÉDIA: Skills (esquerda) + Combat Column (direita) ==========
+        # ========== LINHA MÉDIA: 3 Colunas Iguais (33% cada) ==========
         middle_row = QHBoxLayout()
         middle_row.setSpacing(15)
         
-        # Perícias (65% - esquerda)
+        # Coluna 1: Perícias (33%)
         skills_group = self.create_skills_section()
-        middle_row.addWidget(skills_group, 65)
+        middle_row.addWidget(skills_group, 33)
         
-        # Coluna de Combate (35% - direita): TR + Ataques
+        # Coluna 2: Vantagem/Desvantagem + TRs + Ataques (33%)
         combat_column = self.create_combat_column()
-        middle_row.addWidget(combat_column, 35)
+        middle_row.addWidget(combat_column, 33)
+        
+        # Coluna 3: Magias (33% - placeholder)
+        spells_column = self.create_spells_column()
+        middle_row.addWidget(spells_column, 33)
         
         layout.addLayout(middle_row)
         
@@ -247,6 +257,25 @@ class CharacterSheetTab(QWidget):
         """)
         inventory_btn.clicked.connect(self.open_inventory)
         top_header.addWidget(inventory_btn)
+        
+        # Botão de edição avançada
+        edit_btn = QPushButton("⚙️ Edição Avançada")
+        edit_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #5D4037;
+                color: #F5EBDC;
+                border: 2px solid #3E2723;
+                border-radius: 5px;
+                padding: 5px 10px;
+                font-weight: bold;
+                font-size: 10px;
+            }
+            QPushButton:hover {
+                background-color: #6D4C41;
+            }
+        """)
+        edit_btn.clicked.connect(self.open_advanced_edit)
+        top_header.addWidget(edit_btn)
         
         top_header.addStretch()
         
@@ -623,11 +652,65 @@ class CharacterSheetTab(QWidget):
         return saves_group
     
     def create_combat_column(self):
-        """Cria coluna de combate com TR compactos e ataques"""
+        """Cria coluna de combate com vantagem/desvantagem, TRs e ataques"""
         column_widget = QWidget()
         column_layout = QVBoxLayout(column_widget)
         column_layout.setSpacing(15)
         column_layout.setContentsMargins(0, 0, 0, 0)
+        
+        # Botões de Vantagem/Desvantagem
+        adv_group = QGroupBox("VANTAGEM/DESVANTAGEM")
+        adv_layout = QVBoxLayout()
+        adv_layout.setSpacing(8)
+        
+        self.advantage_btn_column = QPushButton("⬆️ Vantagem")
+        self.advantage_btn_column.setCheckable(True)
+        self.advantage_btn_column.setStyleSheet("""
+            QPushButton {
+                background-color: #455A64;
+                color: #F5EBDC;
+                border: 2px solid #263238;
+                border-radius: 5px;
+                padding: 8px;
+                font-weight: bold;
+                font-size: 11px;
+            }
+            QPushButton:hover {
+                background-color: #546E7A;
+            }
+            QPushButton:checked {
+                background-color: #2E7D32;
+                border-color: #1B5E20;
+            }
+        """)
+        self.advantage_btn_column.clicked.connect(self.toggle_advantage_column)
+        adv_layout.addWidget(self.advantage_btn_column)
+        
+        self.disadvantage_btn_column = QPushButton("⬇️ Desvantagem")
+        self.disadvantage_btn_column.setCheckable(True)
+        self.disadvantage_btn_column.setStyleSheet("""
+            QPushButton {
+                background-color: #455A64;
+                color: #F5EBDC;
+                border: 2px solid #263238;
+                border-radius: 5px;
+                padding: 8px;
+                font-weight: bold;
+                font-size: 11px;
+            }
+            QPushButton:hover {
+                background-color: #546E7A;
+            }
+            QPushButton:checked {
+                background-color: #C62828;
+                border-color: #8B0000;
+            }
+        """)
+        self.disadvantage_btn_column.clicked.connect(self.toggle_disadvantage_column)
+        adv_layout.addWidget(self.disadvantage_btn_column)
+        
+        adv_group.setLayout(adv_layout)
+        column_layout.addWidget(adv_group)
         
         # Testes de Resistência (compactos)
         saves_compact = self.create_saves_compact()
@@ -637,18 +720,28 @@ class CharacterSheetTab(QWidget):
         attacks_section = self.create_attacks_section()
         column_layout.addWidget(attacks_section)
         
-        # Espaço reservado para magias (futuro)
-        spells_placeholder = QGroupBox("MAGIAS")
-        spells_placeholder.setStyleSheet("QGroupBox { min-height: 100px; }")
-        spells_layout = QVBoxLayout()
-        placeholder_label = QLabel("Espaço reservado\npara magias")
-        placeholder_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        placeholder_label.setStyleSheet("color: #999; font-style: italic;")
-        spells_layout.addWidget(placeholder_label)
-        spells_placeholder.setLayout(spells_layout)
-        column_layout.addWidget(spells_placeholder)
-        
         column_layout.addStretch()
+        
+        return column_widget
+    
+    def create_spells_column(self):
+        """Cria coluna de magias (placeholder para futuro)"""
+        column_widget = QWidget()
+        column_layout = QVBoxLayout(column_widget)
+        column_layout.setSpacing(15)
+        column_layout.setContentsMargins(0, 0, 0, 0)
+        
+        spells_group = QGroupBox("MAGIAS")
+        spells_layout = QVBoxLayout()
+        
+        placeholder_label = QLabel("Sistema de magias\nserá implementado em breve")
+        placeholder_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        placeholder_label.setStyleSheet("color: #999; font-style: italic; padding: 20px;")
+        spells_layout.addWidget(placeholder_label)
+        
+        spells_layout.addStretch()
+        spells_group.setLayout(spells_layout)
+        column_layout.addWidget(spells_group)
         
         return column_widget
     
@@ -857,10 +950,13 @@ class CharacterSheetTab(QWidget):
         traits_group = QGroupBox("TRAÇOS E CARACTERÍSTICAS")
         traits_layout = QVBoxLayout()
         
-        self.traits_label = QLabel("Nenhum traço")
-        self.traits_label.setWordWrap(True)
-        self.traits_label.setStyleSheet("background-color: transparent; padding: 5px;")
-        traits_layout.addWidget(self.traits_label)
+        # Container para os traços (será atualizado dinamicamente)
+        self.traits_container = QWidget()
+        self.traits_container_layout = QVBoxLayout(self.traits_container)
+        self.traits_container_layout.setContentsMargins(0, 0, 0, 0)
+        self.traits_container_layout.setSpacing(3)
+        
+        traits_layout.addWidget(self.traits_container)
         
         traits_group.setLayout(traits_layout)
         return traits_group
@@ -961,11 +1057,8 @@ class CharacterSheetTab(QWidget):
             sign = '+' if modifier >= 0 else ''
             widgets['bonus'].setText(f"{sign}{modifier}")
         
-        # Traços
-        if self.character.traits:
-            self.traits_label.setText("\n".join(f"• {trait}" for trait in self.character.traits))
-        else:
-            self.traits_label.setText("Nenhum traço")
+        # Traços (com tooltips)
+        self.update_traits_display()
         
         # Idiomas
         if self.character.languages:
@@ -975,6 +1068,79 @@ class CharacterSheetTab(QWidget):
         
         # Ataques
         self.update_attacks_display()
+    
+    def update_traits_display(self):
+        """Atualiza a exibição de traços com tooltips informativos"""
+        from models import get_trait_description
+        
+        # Limpa traços existentes
+        while self.traits_container_layout.count():
+            child = self.traits_container_layout.takeAt(0)
+            if child.widget():
+                child.widget().deleteLater()
+        
+        if not self.character.traits:
+            no_traits = QLabel("Nenhum traço")
+            no_traits.setStyleSheet("color: #999; font-style: italic; padding: 5px;")
+            self.traits_container_layout.addWidget(no_traits)
+            return
+        
+        # Adiciona cada traço com ícone informativo
+        for trait in self.character.traits:
+            trait_layout = QHBoxLayout()
+            trait_layout.setContentsMargins(0, 0, 0, 0)
+            trait_layout.setSpacing(5)
+            
+            # Bullet point e nome do traço
+            trait_label = QLabel(f"• {trait}")
+            trait_label.setFont(QFont("Georgia", 10))
+            trait_label.setStyleSheet("background-color: transparent; color: #654321;")
+            trait_layout.addWidget(trait_label)
+            
+            trait_layout.addStretch()
+            
+            # Ícone informativo com tooltip
+            info_icon = QLabel("ℹ️")
+            info_icon.setFont(QFont("Georgia", 10))
+            info_icon.setStyleSheet("""
+                background-color: transparent; 
+                color: #4A90E2;
+                padding: 2px;
+            """)
+            info_icon.setCursor(Qt.CursorShape.WhatsThisCursor)
+            
+            # Define o tooltip com a descrição
+            description = get_trait_description(trait)
+            info_icon.setToolTip(f"<b>{trait}</b><br><br>{description}")
+            
+            trait_layout.addWidget(info_icon)
+            
+            # Container para o layout
+            trait_widget = QWidget()
+            trait_widget.setLayout(trait_layout)
+            trait_widget.setStyleSheet("background-color: transparent;")
+            
+            self.traits_container_layout.addWidget(trait_widget)
+    
+    # ========== MÉTODOS DE VANTAGEM/DESVANTAGEM ==========
+    
+    def toggle_advantage_column(self):
+        """Ativa/desativa vantagem"""
+        self.advantage_active = self.advantage_btn_column.isChecked()
+        
+        # Se vantagem foi ativada, desativa desvantagem
+        if self.advantage_active and self.disadvantage_active:
+            self.disadvantage_active = False
+            self.disadvantage_btn_column.setChecked(False)
+    
+    def toggle_disadvantage_column(self):
+        """Ativa/desativa desvantagem"""
+        self.disadvantage_active = self.disadvantage_btn_column.isChecked()
+        
+        # Se desvantagem foi ativada, desativa vantagem
+        if self.disadvantage_active and self.advantage_active:
+            self.advantage_active = False
+            self.advantage_btn_column.setChecked(False)
     
     # ========== MÉTODOS DE INVENTÁRIO E ATAQUES ==========
     
@@ -987,6 +1153,17 @@ class CharacterSheetTab(QWidget):
     def on_inventory_updated(self):
         """Callback quando inventário é atualizado"""
         self.character.update_derived_stats()
+        self.update_display()
+        self.character_updated.emit()
+    
+    def open_advanced_edit(self):
+        """Abre a janela de edição avançada"""
+        edit_window = AdvancedEditWindow(self.character, self)
+        edit_window.character_updated.connect(self.on_advanced_edit_updated)
+        edit_window.exec()
+    
+    def on_advanced_edit_updated(self):
+        """Callback quando edição avançada é aplicada"""
         self.update_display()
         self.character_updated.emit()
     
@@ -1053,11 +1230,35 @@ class CharacterSheetTab(QWidget):
         
         attack_roll_btn = QPushButton("🎲 Ataque")
         attack_roll_btn.setMaximumHeight(25)
+        attack_roll_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #8B4513;
+                color: #F5EBDC;
+                border: 2px solid #654321;
+                border-radius: 5px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #A0522D;
+            }
+        """)
         attack_roll_btn.clicked.connect(lambda: self.roll_attack(weapon))
         buttons_layout.addWidget(attack_roll_btn)
         
         damage_roll_btn = QPushButton("🎲 Dano")
         damage_roll_btn.setMaximumHeight(25)
+        damage_roll_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #8B4513;
+                color: #F5EBDC;
+                border: 2px solid #654321;
+                border-radius: 5px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #A0522D;
+            }
+        """)
         damage_roll_btn.clicked.connect(lambda: self.roll_damage(weapon))
         buttons_layout.addWidget(damage_roll_btn)
         
@@ -1069,11 +1270,37 @@ class CharacterSheetTab(QWidget):
         """Rola ataque com uma arma"""
         from models import DiceRoller
         
-        # roll_d20() retorna (total, d20_value)
         attack_bonus = weapon.get_attack_bonus(self.character)
-        total, d20_value = DiceRoller.roll_d20(attack_bonus)
         
-        self.dice_history.add_roll(f"Ataque - {weapon.name}", d20_value, attack_bonus, total, "ATTACK")
+        # Rola com vantagem/desvantagem se ativo
+        if self.advantage_active:
+            total1, roll1 = DiceRoller.roll_d20(attack_bonus)
+            total2, roll2 = DiceRoller.roll_d20(attack_bonus)
+            if total1 >= total2:
+                total, d20_value = total1, roll1
+            else:
+                total, d20_value = total2, roll2
+            roll_display = f"{roll1}, {roll2} (maior)"
+        elif self.disadvantage_active:
+            total1, roll1 = DiceRoller.roll_d20(attack_bonus)
+            total2, roll2 = DiceRoller.roll_d20(attack_bonus)
+            if total1 <= total2:
+                total, d20_value = total1, roll1
+            else:
+                total, d20_value = total2, roll2
+            roll_display = f"{roll1}, {roll2} (menor)"
+        else:
+            total, d20_value = DiceRoller.roll_d20(attack_bonus)
+            roll_display = str(d20_value)
+        
+        # Se tem vantagem/desvantagem, mostra os dois dados
+        if self.advantage_active or self.disadvantage_active:
+            mod_sign = '+' if attack_bonus >= 0 else ''
+            message = f"<b>Ataque - {weapon.name}</b>: 🎲 {roll_display} {mod_sign}{attack_bonus} = <b>{total}</b>"
+            self.dice_history.add_entry(message, "ATTACK")
+        else:
+            self.dice_history.add_roll(f"Ataque - {weapon.name}", d20_value, attack_bonus, total, "ATTACK")
+        
         self.dice_history.show_and_raise()
     
     def roll_damage(self, weapon):
@@ -1171,10 +1398,32 @@ class CharacterSheetTab(QWidget):
     
     def roll_save(self, ability: str):
         """Rola teste de resistência"""
-        total, roll = self.character.roll_saving_throw(ability)
+        from models import DiceRoller
+        
         modifier = self.character.stats.get_modifier(ability)
         if ability in self.character.saving_throw_proficiencies:
             modifier += self.character.proficiency_bonus
+        
+        # Rola com vantagem/desvantagem se ativo
+        if self.advantage_active:
+            total1, roll1 = DiceRoller.roll_d20(modifier)
+            total2, roll2 = DiceRoller.roll_d20(modifier)
+            if total1 >= total2:
+                total, roll = total1, roll1
+            else:
+                total, roll = total2, roll2
+            roll_display = f"{roll1}, {roll2} (maior)"
+        elif self.disadvantage_active:
+            total1, roll1 = DiceRoller.roll_d20(modifier)
+            total2, roll2 = DiceRoller.roll_d20(modifier)
+            if total1 <= total2:
+                total, roll = total1, roll1
+            else:
+                total, roll = total2, roll2
+            roll_display = f"{roll1}, {roll2} (menor)"
+        else:
+            total, roll = DiceRoller.roll_d20(modifier)
+            roll_display = str(roll)
         
         ability_names = {
             'strength': 'Força',
@@ -1185,15 +1434,44 @@ class CharacterSheetTab(QWidget):
             'charisma': 'Carisma'
         }
         
-        self.dice_history.add_roll(f"TR {ability_names[ability]}", roll, modifier, total, "SAVE")
+        # Se tem vantagem/desvantagem, mostra os dois dados
+        if self.advantage_active or self.disadvantage_active:
+            mod_sign = '+' if modifier >= 0 else ''
+            message = f"<b>TR {ability_names[ability]}</b>: 🎲 {roll_display} {mod_sign}{modifier} = <b>{total}</b>"
+            self.dice_history.add_entry(message, "SAVE")
+        else:
+            self.dice_history.add_roll(f"TR {ability_names[ability]}", roll, modifier, total, "SAVE")
+        
         self.dice_history.show_and_raise()
     
     def roll_skill(self, skill_name: str, ability: str):
         """Rola teste de perícia"""
-        total, roll = self.character.roll_skill_check(skill_name, ability)
+        from models import DiceRoller
+        
         modifier = self.character.stats.get_modifier(ability)
         if skill_name in self.character.skill_proficiencies:
             modifier += self.character.proficiency_bonus
+        
+        # Rola com vantagem/desvantagem se ativo
+        if self.advantage_active:
+            total1, roll1 = DiceRoller.roll_d20(modifier)
+            total2, roll2 = DiceRoller.roll_d20(modifier)
+            if total1 >= total2:
+                total, roll = total1, roll1
+            else:
+                total, roll = total2, roll2
+            roll_display = f"{roll1}, {roll2} (maior)"
+        elif self.disadvantage_active:
+            total1, roll1 = DiceRoller.roll_d20(modifier)
+            total2, roll2 = DiceRoller.roll_d20(modifier)
+            if total1 <= total2:
+                total, roll = total1, roll1
+            else:
+                total, roll = total2, roll2
+            roll_display = f"{roll1}, {roll2} (menor)"
+        else:
+            total, roll = DiceRoller.roll_d20(modifier)
+            roll_display = str(roll)
         
         skill_names_pt = {
             'Acrobatics': 'Acrobacia',
@@ -1216,7 +1494,16 @@ class CharacterSheetTab(QWidget):
             'Survival': 'Sobrevivência'
         }
         
-        self.dice_history.add_roll(skill_names_pt.get(skill_name, skill_name), roll, modifier, total, "SKILL")
+        skill_name_pt = skill_names_pt.get(skill_name, skill_name)
+        
+        # Se tem vantagem/desvantagem, mostra os dois dados
+        if self.advantage_active or self.disadvantage_active:
+            mod_sign = '+' if modifier >= 0 else ''
+            message = f"<b>{skill_name_pt}</b>: 🎲 {roll_display} {mod_sign}{modifier} = <b>{total}</b>"
+            self.dice_history.add_entry(message, "SKILL")
+        else:
+            self.dice_history.add_roll(skill_name_pt, roll, modifier, total, "SKILL")
+        
         self.dice_history.show_and_raise()
     
     # ========== MÉTODOS DE HP ==========

@@ -146,7 +146,16 @@ class DiceHistoryWindow(QWidget):
     def add_roll(self, roll_name: str, roll_value: int, modifier: int, total: int, roll_type: str = "ROLL"):
         """Adiciona uma rolagem formatada ao histórico"""
         mod_sign = '+' if modifier >= 0 else ''
-        message = f"<b>{roll_name}</b>: 🎲 {roll_value} {mod_sign}{modifier} = <b>{total}</b>"
+        
+        # Colorir o valor do dado se for crítico (20) ou falha crítica (1)
+        if roll_value == 20:
+            dice_display = f'<span style="color: #2E7D32; font-weight: bold;">{roll_value}</span>'
+        elif roll_value == 1:
+            dice_display = f'<span style="color: #C62828; font-weight: bold;">{roll_value}</span>'
+        else:
+            dice_display = str(roll_value)
+        
+        message = f"<b>{roll_name}</b>: 🎲 {dice_display} {mod_sign}{modifier} = <b>{total}</b>"
         self.add_entry(message, roll_type)
     
     def clear_history(self):
