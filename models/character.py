@@ -52,6 +52,9 @@ class Character:
     # Fighting Styles (pode ter múltiplos via feats ou multiclasse)
     fighting_styles: List[str] = field(default_factory=list)
     
+    # Feats (Talentos)
+    feats: List[str] = field(default_factory=list)
+    
     def __post_init__(self):
         self.update_derived_stats()
     
@@ -135,6 +138,10 @@ class Character:
         
         dex_modifier = self.stats.get_modifier('dexterity')
         self.initiative = dex_modifier
+        
+        # Aplica bônus de Alert (+5 iniciativa)
+        if self.has_feat("Alert"):
+            self.initiative += 5
     
     def set_race(self, race_name: str):
         """Define a raça do personagem e aplica bônus raciais"""
@@ -495,6 +502,18 @@ class Character:
         """
         return style_name in self.fighting_styles
     
+    def has_feat(self, feat_name: str) -> bool:
+        """
+        Verifica se o personagem tem um Feat específico
+        
+        Args:
+            feat_name: Nome do Feat
+            
+        Returns:
+            True se o personagem tem o feat, False caso contrário
+        """
+        return feat_name in self.feats
+    
     def to_dict(self) -> dict:
         """Converte personagem para dicionário (para salvar)"""
         return {
@@ -526,6 +545,7 @@ class Character:
             'inventory': self.inventory.to_dict(),
             'spellcasting': self.spellcasting.to_dict() if self.spellcasting else None,
             'fighting_styles': self.fighting_styles,
+            'feats': self.feats,
         }
     
     @classmethod
@@ -578,6 +598,7 @@ class Character:
             char.spellcasting = SpellcastingInfo.from_dict(data['spellcasting'])
         
         char.fighting_styles = data.get('fighting_styles', [])
+        char.feats = data.get('feats', [])
         
         return char
     

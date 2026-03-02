@@ -8,6 +8,7 @@ from .dice_history_window import DiceHistoryWindow
 from .inventory_window import InventoryWindow
 from .advanced_edit_window import AdvancedEditWindow
 from .fighting_style_dialog import FightingStyleDialog
+from .feat_dialog import FeatDialog
 
 class CharacterSheetTab(QWidget):
     character_updated = pyqtSignal()
@@ -1244,6 +1245,82 @@ class CharacterSheetTab(QWidget):
             separator.setStyleSheet("background-color: #D2B48C; max-height: 1px;")
             self.features_container_layout.addWidget(separator)
         
+        # Adiciona Feats se existirem
+        if self.character.feats:
+            from models.feats import get_feat
+            
+            for feat_name in self.character.feats:
+                feat_layout = QHBoxLayout()
+                feat_layout.setContentsMargins(0, 0, 0, 0)
+                feat_layout.setSpacing(5)
+                
+                # Verifica se é um ASI (começa com "ASI:")
+                if feat_name.startswith("ASI:"):
+                    # Label do ASI com destaque
+                    feat_label = QLabel(f"⭐ {feat_name}")
+                    feat_label.setFont(QFont("Georgia", 10, QFont.Weight.Bold))
+                    feat_label.setStyleSheet("background-color: transparent; color: #DAA520;")
+                    feat_layout.addWidget(feat_label)
+                    
+                    feat_layout.addStretch()
+                    
+                    # Ícone informativo com tooltip
+                    info_icon = QLabel("ℹ️")
+                    info_icon.setFont(QFont("Georgia", 10))
+                    info_icon.setStyleSheet("""
+                        background-color: transparent; 
+                        color: #4A90E2;
+                        padding: 2px;
+                    """)
+                    info_icon.setCursor(Qt.CursorShape.WhatsThisCursor)
+                    info_icon.setToolTip("<b>Ability Score Improvement</b><br><br>Você aumentou seus atributos.")
+                    
+                    feat_layout.addWidget(info_icon)
+                else:
+                    # Feat normal
+                    feat = get_feat(feat_name)
+                    if feat:
+                        # Label do Feat com destaque
+                        feat_label = QLabel(f"⭐ Feat: {feat.name}")
+                        feat_label.setFont(QFont("Georgia", 10, QFont.Weight.Bold))
+                        feat_label.setStyleSheet("background-color: transparent; color: #DAA520;")
+                        feat_layout.addWidget(feat_label)
+                        
+                        feat_layout.addStretch()
+                        
+                        # Ícone informativo com tooltip
+                        info_icon = QLabel("ℹ️")
+                        info_icon.setFont(QFont("Georgia", 10))
+                        info_icon.setStyleSheet("""
+                            background-color: transparent; 
+                            color: #4A90E2;
+                            padding: 2px;
+                        """)
+                        info_icon.setCursor(Qt.CursorShape.WhatsThisCursor)
+                        info_icon.setToolTip(f"<b>{feat.name}</b><br><br>{feat.description}<br><br><i>{feat.mechanical_effect.replace(chr(10), '<br>')}</i>")
+                        
+                        feat_layout.addWidget(info_icon)
+                    else:
+                        # Feat não encontrado, apenas mostra o nome
+                        feat_label = QLabel(f"⭐ Feat: {feat_name}")
+                        feat_label.setFont(QFont("Georgia", 10, QFont.Weight.Bold))
+                        feat_label.setStyleSheet("background-color: transparent; color: #DAA520;")
+                        feat_layout.addWidget(feat_label)
+                        feat_layout.addStretch()
+                
+                # Container para o layout
+                feat_widget = QWidget()
+                feat_widget.setLayout(feat_layout)
+                feat_widget.setStyleSheet("background-color: transparent;")
+                
+                self.features_container_layout.addWidget(feat_widget)
+            
+            # Adiciona separador após todos os Feats
+            separator = QFrame()
+            separator.setFrameShape(QFrame.Shape.HLine)
+            separator.setStyleSheet("background-color: #D2B48C; max-height: 1px;")
+            self.features_container_layout.addWidget(separator)
+        
         if not self.character.class_features:
             no_features = QLabel("Nenhuma feature")
             no_features.setStyleSheet("color: #999; font-style: italic; padding: 5px;")
@@ -1252,6 +1329,10 @@ class CharacterSheetTab(QWidget):
         
         # Adiciona cada feature com ícone informativo
         for feature_name in self.character.class_features:
+            # Pula "Ability Score Improvement" pois é tratado pelo sistema de Feats
+            if feature_name == "Ability Score Improvement":
+                continue
+            
             feature_layout = QHBoxLayout()
             feature_layout.setContentsMargins(0, 0, 0, 0)
             feature_layout.setSpacing(5)
@@ -1561,6 +1642,55 @@ class CharacterSheetTab(QWidget):
             # Armazena referência ao checkbox no objeto weapon para acesso posterior
             weapon.dueling_checkbox = dueling_checkbox
         
+        # Checkbox para Great Weapon Master (se aplicável)
+        gwm_checkbox = None
+        if (self.character.has_feat("Great Weapon Master") and 
+            weapon.weapon_range.lower() == "melee" and
+            weapon.has_property("heavy")):
+            from PyQt6.QtWidgets import QCheckBox
+            gwm_checkbox = QCheckBox("💪 Usar GWM (-5 ataque, +10 dano)")
+            gwm_checkbox.setFont(QFont("Georgia", 8))
+            gwm_checkbox.setStyleSheet("""
+                QCheckBox {
+                    background-color: transparent;
+                    color: #8B4513;
+                    font-weight: bold;
+                }
+                QCheckBox::indicator {
+                    width: 15px;
+                    height: 15px;
+                }
+            """)
+            gwm_checkbox.setChecked(False)  # Desmarcado por padrão
+            weapon_layout.addWidget(gwm_checkbox)
+            
+            # Armazena referência ao checkbox no objeto weapon
+            weapon.gwm_checkbox = gwm_checkbox
+        
+        # Checkbox para Sharpshooter (se aplicável)
+        ss_checkbox = None
+        if (self.character.has_feat("Sharpshooter") and 
+            weapon.weapon_range.lower() == "ranged"):
+            from PyQt6.QtWidgets import QCheckBox
+            ss_checkbox = QCheckBox("🎯 Usar Sharpshooter (-5 ataque, +10 dano)")
+            ss_checkbox.setFont(QFont("Georgia", 8))
+            ss_checkbox.setStyleSheet("""
+                QCheckBox {
+                    background-color: transparent;
+                    color: #8B4513;
+                    font-weight: bold;
+                }
+                QCheckBox::indicator {
+                    width: 15px;
+                    height: 15px;
+                }
+            """)
+            ss_checkbox.setChecked(False)  # Desmarcado por padrão
+            weapon_layout.addWidget(ss_checkbox)
+            
+            # Armazena referência ao checkbox no objeto weapon
+            weapon.sharpshooter_checkbox = ss_checkbox
+        
         # Atualiza o label inicial
         update_damage_label()
         
@@ -1611,6 +1741,18 @@ class CharacterSheetTab(QWidget):
         
         attack_bonus = weapon.get_attack_bonus(self.character)
         
+        # Aplica penalidade de GWM ou Sharpshooter se ativo
+        gwm_ss_penalty = 0
+        gwm_ss_label = ""
+        if hasattr(weapon, 'gwm_checkbox') and weapon.gwm_checkbox.isChecked():
+            gwm_ss_penalty = -5
+            gwm_ss_label = " (GWM)"
+        elif hasattr(weapon, 'sharpshooter_checkbox') and weapon.sharpshooter_checkbox.isChecked():
+            gwm_ss_penalty = -5
+            gwm_ss_label = " (SS)"
+        
+        attack_bonus += gwm_ss_penalty
+        
         # Rola com vantagem/desvantagem se ativo
         if self.advantage_active:
             total1, roll1 = DiceRoller.roll_d20(attack_bonus)
@@ -1658,17 +1800,29 @@ class CharacterSheetTab(QWidget):
             weapon.dueling_checkbox.isChecked()):
             dueling_bonus = 2
         
-        total = damage_total + damage_bonus + dueling_bonus
+        # Verificar se está usando GWM ou Sharpshooter
+        gwm_ss_bonus = 0
+        gwm_ss_label = ""
+        if hasattr(weapon, 'gwm_checkbox') and weapon.gwm_checkbox.isChecked():
+            gwm_ss_bonus = 10
+            gwm_ss_label = "GWM"
+        elif hasattr(weapon, 'sharpshooter_checkbox') and weapon.sharpshooter_checkbox.isChecked():
+            gwm_ss_bonus = 10
+            gwm_ss_label = "SS"
+        
+        total = damage_total + damage_bonus + dueling_bonus + gwm_ss_bonus
         
         damage_type = weapon.damage_type
         rolls_str = "+".join(str(r) for r in damage_rolls)
         
-        # Monta a mensagem incluindo o bônus de Dueling se aplicável
+        # Monta a mensagem incluindo o bônus de Dueling e GWM/SS se aplicável
         bonus_parts = []
         if damage_bonus != 0:
             bonus_parts.append(f"{'+' if damage_bonus >= 0 else ''}{damage_bonus}")
         if dueling_bonus > 0:
             bonus_parts.append(f"+{dueling_bonus} (Dueling)")
+        if gwm_ss_bonus > 0:
+            bonus_parts.append(f"+{gwm_ss_bonus} ({gwm_ss_label})")
         
         bonus_str = " ".join(bonus_parts) if bonus_parts else "+0"
         message = f"<b>{weapon.name}</b>: 🎲 [{rolls_str}] {bonus_str} = <b>{total}</b> de dano {damage_type}"
@@ -1767,6 +1921,9 @@ class CharacterSheetTab(QWidget):
         # Verificar se ganhou Fighting Style neste nível
         self.check_and_select_fighting_style(new_level)
         
+        # Verificar se ganhou Feat/ASI neste nível
+        self.check_and_select_feat(new_level)
+        
         # Mostrar features ganhas (se houver)
         if new_features:
             features_text = "\n".join([f"• {feature}" for feature in new_features])
@@ -1815,6 +1972,132 @@ class CharacterSheetTab(QWidget):
                         f"Você escolheu o Fighting Style: <b>{selected_style}</b>\n\n"
                         f"Este estilo de luta agora faz parte do seu personagem!"
                     )
+    
+    def check_and_select_feat(self, level: int):
+        """Verifica se o personagem ganhou Feat/ASI e permite seleção"""
+        if not self.character.character_class:
+            return
+        
+        class_name = self.character.character_class.name
+        
+        # Verificar se ganhou Feat/ASI neste nível
+        should_get_feat = False
+        
+        # Níveis padrão de ASI para maioria das classes
+        standard_asi_levels = [4, 8, 12, 16, 19]
+        
+        if level in standard_asi_levels:
+            should_get_feat = True
+        
+        # Fighter tem ASIs extras nos níveis 6 e 14
+        if class_name == "Fighter" and level in [6, 14]:
+            should_get_feat = True
+        
+        # Rogue tem ASI extra no nível 10
+        if class_name == "Rogue" and level == 10:
+            should_get_feat = True
+        
+        if should_get_feat:
+            # Abrir dialog de seleção de Feat/ASI
+            dialog = FeatDialog(self.character, self)
+            if dialog.exec():
+                selected_feat = dialog.get_selected_feat()
+                if selected_feat:
+                    if selected_feat.is_asi:
+                        # Aplicar ASI
+                        asi_choice = dialog.get_asi_choice()
+                        self.apply_asi(asi_choice)
+                    else:
+                        # Adicionar feat
+                        if selected_feat.name not in self.character.feats:
+                            self.character.feats.append(selected_feat.name)
+                            self.apply_feat_effects(selected_feat.name)
+                            
+                            QMessageBox.information(
+                                self,
+                                "Feat Adquirido",
+                                f"Você adquiriu o feat: <b>{selected_feat.name}</b>\n\n"
+                                f"Confira a seção de Feats na ficha para ver seus benefícios!"
+                            )
+                    
+                    self.update_display()
+                    self.character_updated.emit()
+    
+    def apply_asi(self, asi_choice: dict):
+        """Aplica Ability Score Improvement"""
+        if not asi_choice:
+            return
+        
+        asi_description = ""
+        
+        if asi_choice["type"] == "single":
+            stat_name = asi_choice["stat"]
+            current_value = getattr(self.character.base_stats, stat_name)
+            new_value = min(current_value + 2, 20)
+            setattr(self.character.base_stats, stat_name, new_value)
+            
+            increase = new_value - current_value
+            
+            # Cria descrição para o feat
+            stat_abbr = stat_name[:3].upper()
+            asi_description = f"ASI: {stat_abbr} +{increase}"
+            
+            QMessageBox.information(
+                self,
+                "ASI Aplicado",
+                f"<b>{stat_name.capitalize()}</b> aumentou de {current_value} para {new_value} (+{increase})!"
+            )
+        else:
+            stat1_name = asi_choice["stat1"]
+            stat2_name = asi_choice["stat2"]
+            
+            current_value1 = getattr(self.character.base_stats, stat1_name)
+            current_value2 = getattr(self.character.base_stats, stat2_name)
+            
+            new_value1 = min(current_value1 + 1, 20)
+            new_value2 = min(current_value2 + 1, 20)
+            
+            setattr(self.character.base_stats, stat1_name, new_value1)
+            setattr(self.character.base_stats, stat2_name, new_value2)
+            
+            # Cria descrição para o feat
+            stat1_abbr = stat1_name[:3].upper()
+            stat2_abbr = stat2_name[:3].upper()
+            asi_description = f"ASI: {stat1_abbr} +1, {stat2_abbr} +1"
+            
+            QMessageBox.information(
+                self,
+                "ASI Aplicado",
+                f"<b>{stat1_name.capitalize()}</b> aumentou de {current_value1} para {new_value1} (+1)\n"
+                f"<b>{stat2_name.capitalize()}</b> aumentou de {current_value2} para {new_value2} (+1)"
+            )
+        
+        # Adiciona o ASI aos feats com descrição do que foi aumentado
+        if asi_description and asi_description not in self.character.feats:
+            self.character.feats.append(asi_description)
+        
+        # Recalcular stats e HP
+        self.character.recalculate_stats()
+        self.character.recalculate_max_hp()
+    
+    def apply_feat_effects(self, feat_name: str):
+        """Aplica efeitos mecânicos de um feat"""
+        # Tough: +2 HP por nível
+        if feat_name == "Tough":
+            hp_bonus = self.character.level * 2
+            self.character.max_hit_points += hp_bonus
+            self.character.current_hit_points += hp_bonus
+        
+        # Mobile: +10 velocidade
+        elif feat_name == "Mobile":
+            self.character.speed += 10
+        
+        # Alert: +5 iniciativa (aplicado automaticamente em update_derived_stats)
+        # Great Weapon Master: -5/+10 (aplicado via checkbox)
+        # Sharpshooter: -5/+10 (aplicado via checkbox)
+        
+        # Recalcula stats para aplicar efeitos passivos
+        self.character.update_derived_stats()
     
     def roll_initiative(self):
         """Rola iniciativa"""
