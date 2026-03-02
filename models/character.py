@@ -8,6 +8,7 @@ from .character_class import CharacterClass, ClassDatabase
 from .background import Background, BackgroundDatabase
 from .dice import DiceRoller
 from .inventory import Inventory
+from .spellcasting import SpellcastingInfo, SpellSlotTable
 
 @dataclass
 class Character:
@@ -40,9 +41,13 @@ class Character:
     
     languages: List[str] = field(default_factory=list)
     traits: List[str] = field(default_factory=list)
+    class_features: List[str] = field(default_factory=list)
     
     equipment: List[str] = field(default_factory=list)  # Mantido para compatibilidade
     inventory: Inventory = field(default_factory=Inventory)
+    
+    # Sistema de magias
+    spellcasting: Optional[SpellcastingInfo] = None
     
     def __post_init__(self):
         self.update_derived_stats()
@@ -71,6 +76,36 @@ class Character:
         if self.subrace:
             self.stats.apply_racial_bonuses(self.subrace.ability_bonuses)
     
+    def apply_racial_proficiencies(self):
+        """Aplica proficiências de armas e armaduras baseadas em traits raciais"""
+        # Elf Weapon Training (High Elf, Wood Elf)
+        if self.has_trait('Elf Weapon Training'):
+            racial_weapons = ['Longsword', 'Shortsword', 'Shortbow', 'Longbow']
+            for weapon in racial_weapons:
+                if weapon not in self.weapon_proficiencies:
+                    self.weapon_proficiencies.append(weapon)
+        
+        # Drow Weapon Training (Dark Elf)
+        if self.has_trait('Drow Weapon Training'):
+            drow_weapons = ['Rapier', 'Shortsword', 'Hand Crossbow']
+            for weapon in drow_weapons:
+                if weapon not in self.weapon_proficiencies:
+                    self.weapon_proficiencies.append(weapon)
+        
+        # Dwarven Combat Training (Dwarf)
+        if self.has_trait('Dwarven Combat Training'):
+            dwarf_weapons = ['Battleaxe', 'Handaxe', 'Light Hammer', 'Warhammer']
+            for weapon in dwarf_weapons:
+                if weapon not in self.weapon_proficiencies:
+                    self.weapon_proficiencies.append(weapon)
+        
+        # Dwarven Armor Training (Mountain Dwarf)
+        if self.has_trait('Dwarven Armor Training'):
+            dwarf_armors = ['Light armor', 'Medium armor']
+            for armor in dwarf_armors:
+                if armor not in self.armor_proficiencies:
+                    self.armor_proficiencies.append(armor)
+    
     def update_derived_stats(self):
         """Atualiza estatísticas derivadas"""
         self.proficiency_bonus = self.calculate_proficiency_bonus()
@@ -82,9 +117,15 @@ class Character:
         
         if self.subrace:
             self.traits.extend(self.subrace.traits)
+            # Aplica velocidade da subraça se especificada (Wood Elf)
+            if self.subrace.speed:
+                self.speed = self.subrace.speed
         
         if self.character_class:
             self.saving_throw_proficiencies = self.character_class.saving_throw_proficiencies.copy()
+        
+        # Aplica proficiências raciais de armas/armaduras
+        self.apply_racial_proficiencies()
         
         # Calcula CA usando o sistema de inventário
         self.armor_class = self.inventory.calculate_armor_class(self)
@@ -112,6 +153,12 @@ class Character:
         if self.character_class:
             self.weapon_proficiencies = self.character_class.weapon_proficiencies.copy()
             self.armor_proficiencies = self.character_class.armor_proficiencies.copy()
+        
+        # Aplica proficiências raciais (depois das de classe para evitar duplicatas)
+        self.apply_racial_proficiencies()
+        
+        # Inicializa spellcasting se for classe conjuradora
+        self.initialize_spellcasting()
         
         self.update_derived_stats()
         self.recalculate_max_hp()
@@ -216,6 +263,10 @@ class Character:
             modifier += self.proficiency_bonus
         return DiceRoller.roll_d20(modifier)
     
+    def has_trait(self, trait_name: str) -> bool:
+        """Verifica se o personagem possui um trait específico"""
+        return trait_name in self.traits
+    
     def recalculate_max_hp(self):
         """Recalcula HP máximo baseado no nível e constituição"""
         if not self.character_class:
@@ -236,6 +287,10 @@ class Character:
                 self.max_hit_points = self.character_class.hit_die + con_modifier
                 self.max_hit_points += (self.level - 1) * (avg_per_level + con_modifier)
                 self.current_hit_points = self.max_hit_points
+        
+        # Dwarven Toughness: +1 HP por nível (Hill Dwarf)
+        if self.has_trait('Dwarven Toughness'):
+            self.max_hit_points += self.level
     
     def take_damage(self, damage: int):
         """Aplica dano ao personagem"""
@@ -274,36 +329,156 @@ class Character:
         return f"Você tem {self.level} dados de vida (d{self.character_class.hit_die if self.character_class else 6})"
     
     def long_rest(self):
-        """Descanso longo - recupera HP e metade dos dados de vida"""
+        """Descanso longo - recupera HP e HD"""
         self.current_hit_points = self.max_hit_points
         self.temporary_hit_points = 0
-        return "HP completamente restaurado!"
-    
-    def level_up(self, use_average: bool = False):
-        """Sobe de nível
         
-        Args:
-            use_average: Se True, usa média do dado de vida. Se False, rola o dado.
+        # Restaura spell slots
+        if self.spellcasting:
+            self.spellcasting.restore_spell_slots()
+    
+    def initialize_spellcasting(self):
+        """Inicializa o sistema de magias para classes conjuradoras"""
+        if not self.character_class:
+            return
+        
+        class_name = self.character_class.name
+        
+        # Verifica se a classe é conjuradora
+        caster_classes = ['Wizard', 'Sorcerer', 'Cleric', 'Druid', 'Bard', 'Warlock', 'Paladin', 'Ranger']
+        if class_name not in caster_classes:
+            self.spellcasting = None
+            return
+        
+        # Cria SpellcastingInfo se não existir
+        if not self.spellcasting:
+            self.spellcasting = SpellcastingInfo()
+        
+        # Define habilidade de conjuração
+        self.spellcasting.spellcasting_ability = SpellSlotTable.get_spellcasting_ability(class_name)
+        
+        # Atualiza spell slots baseado no nível
+        self.spellcasting.max_spell_slots = SpellSlotTable.get_spell_slots(class_name, self.level)
+        self.spellcasting.current_spell_slots = self.spellcasting.max_spell_slots.copy()
+        
+        # Calcula DC e bônus de ataque de magia
+        ability_mod = self.stats.get_modifier(self.spellcasting.spellcasting_ability)
+        self.spellcasting.spell_save_dc = 8 + self.proficiency_bonus + ability_mod
+        self.spellcasting.spell_attack_bonus = self.proficiency_bonus + ability_mod
+    
+    def is_spellcaster(self) -> bool:
+        """Verifica se o personagem é um conjurador"""
+        return self.spellcasting is not None
+    
+    def can_prepare_spells(self) -> bool:
+        """Verifica se a classe prepara magias (vs conhece magias)"""
+        if not self.character_class:
+            return False
+        return SpellSlotTable.uses_prepared_spells(self.character_class.name)
+    
+    def get_max_prepared_spells(self) -> int:
+        """Retorna o número máximo de magias que podem ser preparadas"""
+        if not self.can_prepare_spells() or not self.spellcasting:
+            return 0
+        
+        ability_mod = self.stats.get_modifier(self.spellcasting.spellcasting_ability)
+        return max(1, ability_mod + self.level)
+    
+    def get_spellcasting_type(self) -> str:
         """
+        Retorna o tipo de sistema de magias da classe:
+        - 'wizard': Tem spellbook (conhece muitas) e prepara algumas
+        - 'prepared': Prepara magias diretamente da lista completa (Cleric, Druid, Paladin)
+        - 'known': Conhece número limitado de magias (Sorcerer, Bard, Warlock, Ranger)
+        """
+        if not self.character_class:
+            return 'known'
+        
+        class_name = self.character_class.name
+        
+        if class_name == 'Wizard':
+            return 'wizard'
+        elif class_name in ['Cleric', 'Druid', 'Paladin']:
+            return 'prepared'
+        else:  # Sorcerer, Bard, Warlock, Ranger
+            return 'known'
+    
+    def level_up(self, use_average: bool = True) -> int:
+        """Sobe de nível e retorna HP ganho"""
         self.level += 1
+        self.proficiency_bonus = self.calculate_proficiency_bonus()
         self.update_derived_stats()
+        
+        # Atualiza spell slots se for conjurador
+        if self.is_spellcaster():
+            self.initialize_spellcasting()
         
         if self.character_class:
             con_modifier = self.stats.get_modifier('constitution')
             
             if use_average:
-                # Média arredondada para cima: (dado / 2) + 1
                 hp_gain = (self.character_class.hit_die // 2) + 1
             else:
-                # Rola o dado de vida
                 hp_gain, _ = DiceRoller.roll(f"1d{self.character_class.hit_die}")
             
             hp_gain += con_modifier
-            hp_gain = max(1, hp_gain)  # Mínimo de 1 HP por nível
+            
+            # Dwarven Toughness: +1 HP por nível (Hill Dwarf)
+            if self.has_trait('Dwarven Toughness'):
+                hp_gain += 1
+            
+            hp_gain = max(1, hp_gain)
             self.max_hit_points += hp_gain
             self.current_hit_points = self.max_hit_points
             return hp_gain
         return 0
+    
+    def add_class_features(self, class_name: str, level: int) -> List[str]:
+        """
+        Adiciona features de classe para um nível específico
+        
+        Args:
+            class_name: Nome da classe (preparado para multiclasse)
+            level: Nível da classe para obter features
+            
+        Returns:
+            Lista com nomes das features adicionadas
+        """
+        from .class_features import get_class_features
+        
+        features = get_class_features(class_name, level)
+        new_features = []
+        
+        for feature in features:
+            feature_name = feature.name
+            if feature_name not in self.class_features:
+                self.class_features.append(feature_name)
+                new_features.append(feature_name)
+        
+        return new_features
+    
+    def get_class_feature_description(self, feature_name: str) -> str:
+        """
+        Retorna a descrição de uma feature de classe
+        
+        Args:
+            feature_name: Nome da feature
+            
+        Returns:
+            Descrição da feature ou mensagem padrão
+        """
+        from .class_features import get_all_features_up_to_level
+        
+        if not self.character_class:
+            return "Nenhuma classe selecionada."
+        
+        all_features = get_all_features_up_to_level(self.character_class.name, self.level)
+        
+        for feature in all_features:
+            if feature.name == feature_name:
+                return feature.description
+        
+        return "Descrição não disponível."
     
     def to_dict(self) -> dict:
         """Converte personagem para dicionário (para salvar)"""
@@ -331,8 +506,10 @@ class Character:
             'armor_proficiencies': self.armor_proficiencies,
             'languages': self.languages,
             'traits': self.traits,
+            'class_features': self.class_features,
             'equipment': self.equipment,
             'inventory': self.inventory.to_dict(),
+            'spellcasting': self.spellcasting.to_dict() if self.spellcasting else None,
         }
     
     @classmethod
@@ -375,10 +552,14 @@ class Character:
         char.armor_proficiencies = data.get('armor_proficiencies', [])
         char.languages = data.get('languages', [])
         char.traits = data.get('traits', [])
+        char.class_features = data.get('class_features', [])
         char.equipment = data.get('equipment', [])
         
         if data.get('inventory'):
             char.inventory = Inventory.from_dict(data['inventory'])
+        
+        if data.get('spellcasting'):
+            char.spellcasting = SpellcastingInfo.from_dict(data['spellcasting'])
         
         return char
     

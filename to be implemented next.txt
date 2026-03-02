@@ -2,29 +2,39 @@ CHECK --- Primeiro: Sistema de HP dinâmico (você vai aprender sobre eventos, a
 CHECK --- Primeiro-2: Hover tips (dar um hover com o mouse e aparecer uma tip que explica o que faz cada feature, principalmente para traços e características)
 CHECK --- Segundo: Equipamento básico (trabalhar com listas, CRUD simples)
 
-Terceiro: Sistema de XP e Level Up (lógica de negócio mais complexa)
+In Progress --- Terceiro: Sistema de XP e Level Up (lógica de negócio mais complexa)
 CHECK --- Quarto: Ataques e armas (integração com sistema de dados)
-Quinto: Sistema de magias (banco de dados maior, filtros, busca)
+In Progress --- Quinto: Sistema de magias (banco de dados maior, filtros, busca)
+
+
+--------------- TESTAR LEVEL UPS DAS CLASSES E OUTROS CASTERS TBM ------------------------
+---------------  PROCURAR QUALQUER COISAS QUE POSSA ESTAR ERRADA  ------------------------
 
 
 Básico:
-0. Sistema de Subraças
-1. Sistema de Pontos de Vida Dinâmico
+0. Sistema de Subraças - CHECK
+1. Sistema de Pontos de Vida Dinâmico - CHECK
 	Botões para adicionar/remover HP na ficha
 	Gerenciamento de HP temporário
 	Indicador visual de HP baixo (mudança de cor)
 	Histórico de dano recebido
-2. Equipamento e Inventário Básico
+2. Equipamento e Inventário Básico - CHECK
 	Lista de itens carregados
 	Peso total e capacidade de carga (baseado em Força)
 	Gerenciamento de moedas (PP, PO, PE, PC, PL)
 	Adicionar/remover itens
-3. Sistema de Experiência e Level Up
+3. Sistema de Experiência e Level Up das Classes
 	Adicionar XP manualmente
 	Botão de "Subir de Nível" que:
 		. Rola HP automaticamente
 		. Atualiza bônus de proficiência
 		. Mostra o que mudou
+		. Mostra features de classe do novo nível
+3.1 Fighting Styles
+3.2 Subclasses
+3.3 Feats
+3.3.1 Interação de Feats com Spells
+
 4. Notas e Biografia do Personagem
 	Campo de texto para história/background
 	Notas de sessão
@@ -37,7 +47,7 @@ Nível Intermediário:
 	Espaços de magia por nível
 	Magias preparadas vs conhecidas
 	CD de magia e bônus de ataque mágico
-6. Ataques e Armas
+6. Ataques e Armas - CHECK
 	Lista de armas equipadas
 	Cálculo automático de bônus de ataque
 	Rolagem de dano com tipo de dado específico
@@ -69,3 +79,9 @@ Nível Avançado:
 	Visualização de distribuição de atributos
 	Histórico de rolagens (gráfico)
 	Estatísticas de combate
+13. Installer para disponibilizar o software para download online.
+	Implementar a geração do executável antes, obviamente.
+
+
+
+Lembrar de Buscar as spells da API quando formos fazer o installer, ou já instalar a database pronta, um dos dois.

@@ -187,12 +187,15 @@ class CharacterSheetTab(QWidget):
         
         layout.addLayout(middle_row)
         
-        # ========== LINHA INFERIOR: Traits + Languages + Equipment ==========
+        # ========== LINHA INFERIOR: Traits + Class Features + Languages ==========
         bottom_row = QHBoxLayout()
         bottom_row.setSpacing(15)
         
         traits_group = self.create_traits_section()
         bottom_row.addWidget(traits_group)
+        
+        features_group = self.create_class_features_section()
+        bottom_row.addWidget(features_group)
         
         languages_group = self.create_languages_section()
         bottom_row.addWidget(languages_group)
@@ -725,23 +728,65 @@ class CharacterSheetTab(QWidget):
         return column_widget
     
     def create_spells_column(self):
-        """Cria coluna de magias (placeholder para futuro)"""
+        """Cria coluna de magias com spell slots e lista de magias"""
         column_widget = QWidget()
         column_layout = QVBoxLayout(column_widget)
-        column_layout.setSpacing(15)
+        column_layout.setSpacing(10)
         column_layout.setContentsMargins(0, 0, 0, 0)
         
+        # ========== SPELL SLOTS ==========
+        slots_group = QGroupBox("ESPAÇOS DE MAGIA")
+        slots_layout = QVBoxLayout()
+        slots_layout.setSpacing(5)
+        
+        # Container para spell slots (será atualizado dinamicamente)
+        self.spell_slots_container = QWidget()
+        self.spell_slots_layout = QVBoxLayout(self.spell_slots_container)
+        self.spell_slots_layout.setContentsMargins(0, 0, 0, 0)
+        self.spell_slots_layout.setSpacing(3)
+        
+        slots_layout.addWidget(self.spell_slots_container)
+        slots_group.setLayout(slots_layout)
+        column_layout.addWidget(slots_group)
+        
+        # ========== MAGIAS CONHECIDAS/PREPARADAS ==========
         spells_group = QGroupBox("MAGIAS")
         spells_layout = QVBoxLayout()
+        spells_layout.setSpacing(5)
         
-        placeholder_label = QLabel("Sistema de magias\nserá implementado em breve")
-        placeholder_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        placeholder_label.setStyleSheet("color: #999; font-style: italic; padding: 20px;")
-        spells_layout.addWidget(placeholder_label)
+        # Botão para gerenciar magias
+        manage_spells_btn = QPushButton("⚙️ Gerenciar Magias")
+        manage_spells_btn.clicked.connect(self.open_spell_management)
+        manage_spells_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #8B4513;
+                color: white;
+                border: 2px solid #654321;
+                border-radius: 5px;
+                padding: 5px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #A0522D;
+            }
+        """)
+        spells_layout.addWidget(manage_spells_btn)
         
-        spells_layout.addStretch()
+        # Container para lista de magias (será atualizado dinamicamente)
+        self.spells_list_container = QWidget()
+        self.spells_list_layout = QVBoxLayout(self.spells_list_container)
+        self.spells_list_layout.setContentsMargins(0, 0, 0, 0)
+        self.spells_list_layout.setSpacing(3)
+        
+        # Scroll area para magias
+        scroll = QScrollArea()
+        scroll.setWidget(self.spells_list_container)
+        scroll.setWidgetResizable(True)
+        scroll.setStyleSheet("QScrollArea { border: none; background-color: transparent; }")
+        spells_layout.addWidget(scroll)
+        
         spells_group.setLayout(spells_layout)
-        column_layout.addWidget(spells_group)
+        column_layout.addWidget(spells_group, 1)  # Stretch factor para ocupar espaço
         
         return column_widget
     
@@ -961,6 +1006,22 @@ class CharacterSheetTab(QWidget):
         traits_group.setLayout(traits_layout)
         return traits_group
     
+    def create_class_features_section(self):
+        """Cria seção de features de classe"""
+        features_group = QGroupBox("FEATURES DE CLASSE")
+        features_layout = QVBoxLayout()
+        
+        # Container para as features (será atualizado dinamicamente)
+        self.features_container = QWidget()
+        self.features_container_layout = QVBoxLayout(self.features_container)
+        self.features_container_layout.setContentsMargins(0, 0, 0, 0)
+        self.features_container_layout.setSpacing(3)
+        
+        features_layout.addWidget(self.features_container)
+        
+        features_group.setLayout(features_layout)
+        return features_group
+    
     def create_languages_section(self):
         """Cria seção de idiomas"""
         languages_group = QGroupBox("IDIOMAS E PROFICIÊNCIAS")
@@ -1060,6 +1121,9 @@ class CharacterSheetTab(QWidget):
         # Traços (com tooltips)
         self.update_traits_display()
         
+        # Features de Classe (com tooltips)
+        self.update_class_features_display()
+        
         # Idiomas
         if self.character.languages:
             self.languages_label.setText(", ".join(self.character.languages))
@@ -1068,6 +1132,10 @@ class CharacterSheetTab(QWidget):
         
         # Ataques
         self.update_attacks_display()
+        
+        # Spell Slots e Magias
+        self.update_spell_slots_display()
+        self.update_spells_display()
     
     def update_traits_display(self):
         """Atualiza a exibição de traços com tooltips informativos"""
@@ -1121,6 +1189,188 @@ class CharacterSheetTab(QWidget):
             trait_widget.setStyleSheet("background-color: transparent;")
             
             self.traits_container_layout.addWidget(trait_widget)
+    
+    def update_class_features_display(self):
+        """Atualiza a exibição de features de classe com tooltips informativos"""
+        # Limpa features existentes
+        while self.features_container_layout.count():
+            child = self.features_container_layout.takeAt(0)
+            if child.widget():
+                child.widget().deleteLater()
+        
+        if not self.character.class_features:
+            no_features = QLabel("Nenhuma feature")
+            no_features.setStyleSheet("color: #999; font-style: italic; padding: 5px;")
+            self.features_container_layout.addWidget(no_features)
+            return
+        
+        # Adiciona cada feature com ícone informativo
+        for feature_name in self.character.class_features:
+            feature_layout = QHBoxLayout()
+            feature_layout.setContentsMargins(0, 0, 0, 0)
+            feature_layout.setSpacing(5)
+            
+            # Bullet point e nome da feature
+            feature_label = QLabel(f"• {feature_name}")
+            feature_label.setFont(QFont("Georgia", 10))
+            feature_label.setStyleSheet("background-color: transparent; color: #654321;")
+            feature_layout.addWidget(feature_label)
+            
+            feature_layout.addStretch()
+            
+            # Ícone informativo com tooltip
+            info_icon = QLabel("ℹ️")
+            info_icon.setFont(QFont("Georgia", 10))
+            info_icon.setStyleSheet("""
+                background-color: transparent; 
+                color: #4A90E2;
+                padding: 2px;
+            """)
+            info_icon.setCursor(Qt.CursorShape.WhatsThisCursor)
+            
+            # Define o tooltip com a descrição
+            description = self.character.get_class_feature_description(feature_name)
+            info_icon.setToolTip(f"<b>{feature_name}</b><br><br>{description}")
+            
+            feature_layout.addWidget(info_icon)
+            
+            # Container para o layout
+            feature_widget = QWidget()
+            feature_widget.setLayout(feature_layout)
+            feature_widget.setStyleSheet("background-color: transparent;")
+            
+            self.features_container_layout.addWidget(feature_widget)
+    
+    def update_spell_slots_display(self):
+        """Atualiza a exibição de spell slots"""
+        # Limpa spell slots existentes
+        while self.spell_slots_layout.count():
+            child = self.spell_slots_layout.takeAt(0)
+            if child.widget():
+                child.widget().deleteLater()
+        
+        # Verifica se personagem é conjurador
+        if not self.character.is_spellcaster():
+            no_spells = QLabel("Não é conjurador")
+            no_spells.setStyleSheet("color: #999; font-style: italic; padding: 5px;")
+            self.spell_slots_layout.addWidget(no_spells)
+            return
+        
+        # Exibe spell slots por nível
+        for level in range(1, 10):
+            max_slots = self.character.spellcasting.get_max_slots(level)
+            if max_slots == 0:
+                continue
+            
+            current_slots = self.character.spellcasting.get_available_slots(level)
+            
+            # Layout horizontal para o nível
+            slot_layout = QHBoxLayout()
+            slot_layout.setSpacing(5)
+            
+            # Label do nível
+            level_label = QLabel(f"Nível {level}:")
+            level_label.setFont(QFont("Georgia", 9, QFont.Weight.Bold))
+            level_label.setStyleSheet("color: #654321;")
+            slot_layout.addWidget(level_label)
+            
+            # Círculos de spell slots
+            for i in range(max_slots):
+                slot_circle = QLabel("●" if i < current_slots else "○")
+                slot_circle.setFont(QFont("Arial", 10))
+                slot_circle.setStyleSheet("color: #4A90E2;" if i < current_slots else "color: #999;")
+                slot_layout.addWidget(slot_circle)
+            
+            slot_layout.addStretch()
+            
+            # Widget container
+            slot_widget = QWidget()
+            slot_widget.setLayout(slot_layout)
+            self.spell_slots_layout.addWidget(slot_widget)
+    
+    def update_spells_display(self):
+        """Atualiza a exibição de magias conhecidas/preparadas"""
+        # Limpa magias existentes
+        while self.spells_list_layout.count():
+            child = self.spells_list_layout.takeAt(0)
+            if child.widget():
+                child.widget().deleteLater()
+        
+        # Verifica se personagem é conjurador
+        if not self.character.is_spellcaster():
+            return
+        
+        # Determina qual lista usar (conhecidas ou preparadas)
+        if self.character.can_prepare_spells():
+            spell_list = self.character.spellcasting.prepared_spells
+            list_type = "Preparadas"
+        else:
+            spell_list = self.character.spellcasting.known_spells
+            list_type = "Conhecidas"
+        
+        # Adiciona cantrips
+        cantrips = self.character.spellcasting.known_cantrips
+        if cantrips:
+            cantrip_header = QLabel("Cantrips:")
+            cantrip_header.setFont(QFont("Georgia", 9, QFont.Weight.Bold))
+            cantrip_header.setStyleSheet("color: #654321; margin-top: 5px;")
+            self.spells_list_layout.addWidget(cantrip_header)
+            
+            for cantrip_name in cantrips:
+                spell_label = QLabel(f"• {cantrip_name}")
+                spell_label.setFont(QFont("Georgia", 9))
+                spell_label.setStyleSheet("color: #654321; padding-left: 10px;")
+                spell_label.setWordWrap(True)
+                self.spells_list_layout.addWidget(spell_label)
+        
+        # Adiciona magias por nível
+        if spell_list:
+            from models import SpellDatabase
+            
+            # Agrupa magias por nível
+            spells_by_level = {}
+            for spell_name in spell_list:
+                spell = SpellDatabase.get_spell(spell_name)
+                if spell and spell.level > 0:
+                    if spell.level not in spells_by_level:
+                        spells_by_level[spell.level] = []
+                    spells_by_level[spell.level].append(spell_name)
+            
+            # Exibe por nível
+            for level in sorted(spells_by_level.keys()):
+                level_header = QLabel(f"Nível {level}:")
+                level_header.setFont(QFont("Georgia", 9, QFont.Weight.Bold))
+                level_header.setStyleSheet("color: #654321; margin-top: 5px;")
+                self.spells_list_layout.addWidget(level_header)
+                
+                for spell_name in spells_by_level[level]:
+                    spell_label = QLabel(f"• {spell_name}")
+                    spell_label.setFont(QFont("Georgia", 9))
+                    spell_label.setStyleSheet("color: #654321; padding-left: 10px;")
+                    spell_label.setWordWrap(True)
+                    self.spells_list_layout.addWidget(spell_label)
+        
+        # Se não tem magias
+        if not cantrips and not spell_list:
+            no_spells = QLabel(f"Nenhuma magia {list_type.lower()}")
+            no_spells.setStyleSheet("color: #999; font-style: italic; padding: 5px;")
+            self.spells_list_layout.addWidget(no_spells)
+        
+        self.spells_list_layout.addStretch()
+    
+    def open_spell_management(self):
+        """Abre janela de gerenciamento de magias"""
+        from gui.spell_management_window import SpellManagementWindow
+        
+        dialog = SpellManagementWindow(self.character, self)
+        if dialog.exec():
+            # Atualiza display após fechar a janela
+            self.update_spell_slots_display()
+            self.update_spells_display()
+            
+            # Salva personagem automaticamente
+            if hasattr(self.parent(), 'save_character'):
+                self.parent().save_character()
     
     # ========== MÉTODOS DE VANTAGEM/DESVANTAGEM ==========
     
@@ -1377,6 +1627,15 @@ class CharacterSheetTab(QWidget):
         # Subir de nível
         old_level = self.character.level
         hp_gained = self.character.level_up(use_average)
+        new_level = self.character.level
+        
+        # Adicionar class features do novo nível
+        new_features = []
+        if self.character.character_class:
+            new_features = self.character.add_class_features(
+                self.character.character_class.name,
+                new_level
+            )
         
         # Atualizar display
         self.update_display()
@@ -1385,10 +1644,20 @@ class CharacterSheetTab(QWidget):
         # Adicionar ao histórico
         method = "Média" if use_average else "Rolagem"
         self.dice_history.add_entry(
-            f"<b>Subiu para o nível {self.character.level}!</b> HP ganho: +{hp_gained} ({method})",
+            f"<b>Subiu para o nível {new_level}!</b> HP ganho: +{hp_gained} ({method})",
             "INFO"
         )
         self.dice_history.show_and_raise()
+        
+        # Mostrar features ganhas (se houver)
+        if new_features:
+            features_text = "\n".join([f"• {feature}" for feature in new_features])
+            QMessageBox.information(
+                self,
+                f"Nível {new_level} - Novas Features!",
+                f"Você ganhou as seguintes features de classe:\n\n{features_text}\n\n"
+                f"Confira a seção de Features de Classe na ficha para mais detalhes."
+            )
     
     def roll_initiative(self):
         """Rola iniciativa"""
