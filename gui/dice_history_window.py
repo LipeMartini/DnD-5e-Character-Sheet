@@ -1,15 +1,17 @@
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QPushButton, 
-                             QTextEdit, QLabel)
+                             QTextEdit, QLabel, QLineEdit)
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QFont, QTextCursor
 from datetime import datetime
+import random
+import re
 
 class DiceHistoryWindow(QWidget):
     """Janela de histórico de rolagens com tema medieval"""
     
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Histórico de Rolagens")
+        self.setWindowTitle("Rolagens")
         self.resize(500, 600)
         self.init_ui()
         self.apply_theme()
@@ -67,7 +69,7 @@ class DiceHistoryWindow(QWidget):
         layout.setContentsMargins(20, 20, 20, 20)
         
         # Título
-        title = QLabel("📜 HISTÓRICO DE ROLAGENS 🎲")
+        title = QLabel("🎲 ROLAGENS")
         title.setFont(QFont("Georgia", 16, QFont.Weight.Bold))
         title.setAlignment(Qt.AlignmentFlag.AlignCenter)
         title.setStyleSheet("""
@@ -84,10 +86,38 @@ class DiceHistoryWindow(QWidget):
         self.history_text.setFont(QFont("Georgia", 11))
         layout.addWidget(self.history_text)
         
+        # Campo de rolagem manual (estilo chat)
+        roll_input_layout = QHBoxLayout()
+        roll_input_layout.setSpacing(5)
+        
+        self.manual_dice_input = QLineEdit()
+        self.manual_dice_input.setPlaceholderText("Digite sua rolagem (ex: 1d8, 2d6+3, 4d6-2)...")
+        self.manual_dice_input.setStyleSheet("""
+            QLineEdit {
+                background-color: white;
+                border: 2px solid #8B4513;
+                border-radius: 5px;
+                padding: 8px;
+                font-size: 12px;
+            }
+            QLineEdit:focus {
+                border-color: #A0522D;
+            }
+        """)
+        self.manual_dice_input.returnPressed.connect(self.roll_manual_dice)
+        roll_input_layout.addWidget(self.manual_dice_input)
+        
+        roll_btn = QPushButton("🎲 Rolar")
+        roll_btn.setFixedWidth(100)
+        roll_btn.clicked.connect(self.roll_manual_dice)
+        roll_input_layout.addWidget(roll_btn)
+        
+        layout.addLayout(roll_input_layout)
+        
         # Botões
         button_layout = QHBoxLayout()
         
-        clear_btn = QPushButton("Limpar Histórico")
+        clear_btn = QPushButton("Limpar")
         clear_btn.clicked.connect(self.clear_history)
         button_layout.addWidget(clear_btn)
         
@@ -157,6 +187,77 @@ class DiceHistoryWindow(QWidget):
         
         message = f"<b>{roll_name}</b>: 🎲 {dice_display} {mod_sign}{modifier} = <b>{total}</b>"
         self.add_entry(message, roll_type)
+    
+    def add_custom_roll(self, roll_name: str, formatted_result: str):
+        """Adiciona uma rolagem customizada (manual) ao histórico"""
+        self.add_entry(f"<b>{formatted_result}</b>", "MANUAL")
+    
+    def roll_manual_dice(self):
+        """Rola dados manualmente a partir de uma expressão (ex: 1d8, 2d6+3)"""
+        from PyQt6.QtWidgets import QMessageBox
+        
+        expression = self.manual_dice_input.text().strip()
+        if not expression:
+            return
+        
+        try:
+            # Parse da expressão (ex: 2d6+3, 1d8, 4d6-2)
+            pattern = r'(\d+)d(\d+)([\+\-]\d+)?'
+            match = re.match(pattern, expression.lower().replace(' ', ''))
+            
+            if not match:
+                QMessageBox.warning(
+                    self,
+                    "Formato Inválido",
+                    f"Formato inválido: '{expression}'\n\n"
+                    f"Use formatos como:\n"
+                    f"• 1d8\n"
+                    f"• 2d6+3\n"
+                    f"• 4d6-2"
+                )
+                return
+            
+            num_dice = int(match.group(1))
+            die_size = int(match.group(2))
+            modifier = int(match.group(3)) if match.group(3) else 0
+            
+            # Validação
+            if num_dice > 100 or num_dice < 1:
+                QMessageBox.warning(self, "Erro", "Número de dados deve ser entre 1 e 100")
+                return
+            
+            if die_size not in [2, 4, 6, 8, 10, 12, 20, 100]:
+                QMessageBox.warning(self, "Erro", f"Tamanho de dado inválido: d{die_size}\n\nUse: d4, d6, d8, d10, d12, d20, d100")
+                return
+            
+            # Rolar dados
+            rolls = [random.randint(1, die_size) for _ in range(num_dice)]
+            total = sum(rolls) + modifier
+            
+            # Formatar resultado
+            rolls_str = " + ".join(str(r) for r in rolls)
+            
+            if modifier > 0:
+                result = f"Manual - {expression}: 🎲 ({rolls_str}) + {modifier} = <b>{total}</b>"
+            elif modifier < 0:
+                result = f"Manual - {expression}: 🎲 ({rolls_str}) - {abs(modifier)} = <b>{total}</b>"
+            else:
+                result = f"Manual - {expression}: 🎲 ({rolls_str}) = <b>{total}</b>"
+            
+            # Adicionar ao histórico
+            self.add_entry(result, "MANUAL")
+            
+            # Limpar campo
+            self.manual_dice_input.clear()
+            self.manual_dice_input.setFocus()
+            
+        except Exception as e:
+            QMessageBox.warning(
+                self,
+                "Erro",
+                f"Erro ao processar rolagem: {str(e)}\n\n"
+                f"Use formatos como: 1d8, 2d6+3, 4d6-2"
+            )
     
     def clear_history(self):
         """Limpa o histórico"""

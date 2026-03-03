@@ -116,7 +116,7 @@ class SpellManagementWindow(QDialog):
         else:
             # Classes que conhecem magias (Bard, Sorcerer, Warlock, Ranger)
             from models.spellcasting import SpellSlotTable
-            max_known = SpellSlotTable.get_spells_known(self.character.character_class.name, self.character.level)
+            max_known = SpellSlotTable.get_spells_known(self.character, self.character.level)
             current_known = len(self.character.spellcasting.known_spells)
             
             if max_known < 999:  # Se tem limite
@@ -582,7 +582,7 @@ class SpellManagementWindow(QDialog):
         else:
             # Classes que conhecem magias
             from models.spellcasting import SpellSlotTable
-            max_known = SpellSlotTable.get_spells_known(self.character.character_class.name, self.character.level)
+            max_known = SpellSlotTable.get_spells_known(self.character, self.character.level)
             current_known = len(self.character.spellcasting.known_spells)
             
             if max_known < 999:
@@ -593,9 +593,19 @@ class SpellManagementWindow(QDialog):
         all_spells = SpellDatabase.get_all_spells()
         class_name = self.character.character_class.name
         
+        # Determinar qual spell list usar
+        spell_list_class = class_name
+        
+        # Subclasses que usam spell lists de outras classes
+        if hasattr(self.character, 'subclass_name') and self.character.subclass_name:
+            if self.character.subclass_name == "Eldritch Knight":
+                spell_list_class = "Wizard"
+            elif self.character.subclass_name == "Arcane Trickster":
+                spell_list_class = "Wizard"
+        
         # Filtra magias por classe
         class_spells = {name: spell for name, spell in all_spells.items() 
-                       if class_name in spell.classes}
+                       if spell_list_class in spell.classes}
         
         # Organiza por nível
         for level in range(10):
@@ -955,7 +965,7 @@ class SpellManagementWindow(QDialog):
         # Verifica limite de magias conhecidas (apenas para magias de nível 1+, não cantrips)
         if level > 0:
             from models.spellcasting import SpellSlotTable
-            max_known = SpellSlotTable.get_spells_known(self.character.character_class.name, self.character.level)
+            max_known = SpellSlotTable.get_spells_known(self.character, self.character.level)
             current_known = len(self.character.spellcasting.known_spells)
             
             if max_known < 999 and current_known >= max_known:

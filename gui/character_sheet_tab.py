@@ -1,6 +1,6 @@
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QFormLayout,
                              QLabel, QGroupBox, QScrollArea, QGridLayout, 
-                             QPushButton, QSpinBox, QMessageBox, QFrame)
+                             QPushButton, QSpinBox, QMessageBox, QFrame, QLineEdit)
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QFont, QPalette, QColor
 from models import Character
@@ -225,8 +225,8 @@ class CharacterSheetTab(QWidget):
         # Linha superior com botões
         top_header = QHBoxLayout()
         
-        # Botão de histórico de rolagens
-        history_btn = QPushButton("📜 Histórico")
+        # Botão de rolagens
+        history_btn = QPushButton("🎲 Rolagens")
         history_btn.setStyleSheet("""
             QPushButton {
                 background-color: #654321;
@@ -596,6 +596,26 @@ class CharacterSheetTab(QWidget):
         long_rest_btn.clicked.connect(self.long_rest)
         hp_layout.addWidget(long_rest_btn)
         
+        # Botão de Anotações
+        notes_btn = QPushButton("📝 Anotações")
+        notes_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #DAA520;
+                color: white;
+                border: 2px solid #B8860B;
+                border-radius: 5px;
+                min-width: 150px;
+                padding: 8px 15px;
+                font-weight: bold;
+                font-size: 11px;
+            }
+            QPushButton:hover {
+                background-color: #FFD700;
+            }
+        """)
+        notes_btn.clicked.connect(self.open_notes)
+        hp_layout.addWidget(notes_btn)
+        
         hp_layout.addStretch()
         hp_group.setLayout(hp_layout)
         return hp_group
@@ -740,6 +760,30 @@ class CharacterSheetTab(QWidget):
         slots_group = QGroupBox("ESPAÇOS DE MAGIA")
         slots_layout = QVBoxLayout()
         slots_layout.setSpacing(5)
+        
+        # Header com botão de edição
+        header_layout = QHBoxLayout()
+        header_layout.addStretch()
+        
+        edit_slots_btn = QPushButton("✏️")
+        edit_slots_btn.setToolTip("Editar Spell Slots manualmente")
+        edit_slots_btn.setFixedSize(30, 30)
+        edit_slots_btn.clicked.connect(self.open_spell_slots_editor)
+        edit_slots_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #8B4513;
+                color: white;
+                border: 2px solid #654321;
+                border-radius: 5px;
+                font-size: 14px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #A0522D;
+            }
+        """)
+        header_layout.addWidget(edit_slots_btn)
+        slots_layout.addLayout(header_layout)
         
         # Container para spell slots (será atualizado dinamicamente)
         self.spell_slots_container = QWidget()
@@ -1067,6 +1111,9 @@ class CharacterSheetTab(QWidget):
         
         self.speed_label.setText(f"{self.character.speed} ft")
         self.prof_bonus_label.setText(f"+{self.character.proficiency_bonus}")
+        
+        # Range de Crítico continua funcionando nos bastidores (usado em roll_attack)
+        # Não precisa mais de display visual
         
         # HP
         current = self.character.current_hit_points
@@ -1775,6 +1822,20 @@ class CharacterSheetTab(QWidget):
         
         return None  # Cancelado
     
+    def open_spell_slots_editor(self):
+        """Abre editor de spell slots"""
+        from gui.spell_slots_editor import SpellSlotsEditor
+        
+        dialog = SpellSlotsEditor(self.character, self)
+        if dialog.exec():
+            # Atualiza display após salvar mudanças
+            self.update_spell_slots_display()
+            self.character_updated.emit()
+            
+            # Salva personagem automaticamente
+            if hasattr(self.parent(), 'save_character'):
+                self.parent().save_character()
+    
     def open_spell_management(self):
         """Abre janela de gerenciamento de magias"""
         from gui.spell_management_window import SpellManagementWindow
@@ -2096,13 +2157,32 @@ class CharacterSheetTab(QWidget):
             total, d20_value = DiceRoller.roll_d20(attack_bonus)
             roll_display = str(d20_value)
         
+        # Verifica crítico baseado no range do personagem (Champion tem 19-20 ou 18-20)
+        critical_range = self.character.get_critical_range()
+        is_critical = d20_value >= critical_range
+        is_fumble = d20_value == 1
+        
         # Se tem vantagem/desvantagem, mostra os dois dados
         if self.advantage_active or self.disadvantage_active:
             mod_sign = '+' if attack_bonus >= 0 else ''
-            message = f"<b>Ataque - {weapon.name}</b>: 🎲 {roll_display} {mod_sign}{attack_bonus} = <b>{total}</b>"
+            message = f"<b>Ataque - {weapon.name}</b>{gwm_ss_label}: 🎲 {roll_display} {mod_sign}{attack_bonus} = <b>{total}</b>"
+            
+            if is_critical:
+                message += " 🎯 <b>CRÍTICO!</b>"
+            elif is_fumble:
+                message += " ❌ <b>Falha Crítica</b>"
+            
             self.dice_history.add_entry(message, "ATTACK")
         else:
-            self.dice_history.add_roll(f"Ataque - {weapon.name}", d20_value, attack_bonus, total, "ATTACK")
+            mod_sign = '+' if attack_bonus >= 0 else ''
+            message = f"<b>Ataque - {weapon.name}</b>{gwm_ss_label}: 🎲 {d20_value} {mod_sign}{attack_bonus} = <b>{total}</b>"
+            
+            if is_critical:
+                message += " 🎯 <b>CRÍTICO!</b>"
+            elif is_fumble:
+                message += " ❌ <b>Falha Crítica</b>"
+            
+            self.dice_history.add_entry(message, "ATTACK")
         
         self.dice_history.show_and_raise()
     
@@ -2266,10 +2346,13 @@ class CharacterSheetTab(QWidget):
         # 1. Fighting Style
         self.check_and_select_fighting_style(new_level)
         
-        # 2. Subclasse
+        # 2. Additional Fighting Style (Champion nível 10)
+        self.check_champion_additional_fighting_style(new_level)
+        
+        # 3. Subclasse
         self.check_and_select_subclass(new_level)
         
-        # 3. Feat/ASI
+        # 4. Feat/ASI
         self.check_and_select_feat(new_level)
     
     def check_and_select_fighting_style(self, level: int):
@@ -2310,6 +2393,39 @@ class CharacterSheetTab(QWidget):
                         f"Você escolheu o Fighting Style: <b>{selected_style}</b>\n\n"
                         f"Este estilo de luta agora faz parte do seu personagem!"
                     )
+    
+    def check_champion_additional_fighting_style(self, level: int):
+        """Verifica se Champion nível 10 deve ganhar segundo Fighting Style"""
+        if not self.character.character_class:
+            return
+        
+        # Apenas para Champion no nível 10
+        if self.character.subclass_name != "Champion" or level != 10:
+            return
+        
+        # Se já tem 2 ou mais Fighting Styles, não oferece novamente
+        if len(self.character.fighting_styles) >= 2:
+            return
+        
+        # Abrir dialog de seleção
+        from gui.fighting_style_dialog import FightingStyleDialog
+        
+        dialog = FightingStyleDialog("Fighter", self)
+        dialog.setWindowTitle("Champion - Additional Fighting Style")
+        
+        if dialog.exec():
+            selected_style = dialog.get_selected_style()
+            if selected_style and selected_style not in self.character.fighting_styles:
+                self.character.fighting_styles.append(selected_style)
+                self.update_display()
+                self.character_updated.emit()
+                
+                QMessageBox.information(
+                    self,
+                    "Additional Fighting Style",
+                    f"Você escolheu um segundo Fighting Style: <b>{selected_style}</b>\n\n"
+                    f"Como Champion, você agora possui múltiplos estilos de combate!"
+                )
     
     def check_and_select_subclass(self, level: int):
         """Verifica se o personagem deve escolher subclasse e permite seleção"""
@@ -2371,15 +2487,33 @@ class CharacterSheetTab(QWidget):
                             if skill not in self.character.skill_proficiencies:
                                 self.character.skill_proficiencies.append(skill)
                 
+                # Configurar spellcasting para Eldritch Knight
+                if selected_subclass == "Eldritch Knight":
+                    self.setup_eldritch_knight_spellcasting()
+                
                 self.update_display()
                 self.character_updated.emit()
                 
-                QMessageBox.information(
-                    self,
-                    "Subclasse Selecionada",
-                    f"Você escolheu a subclasse: <b>{selected_subclass}</b>\n\n"
-                    f"Esta subclasse agora faz parte do seu personagem!"
-                )
+                # Aviso especial para Battle Master
+                if selected_subclass == "Battle Master":
+                    QMessageBox.information(
+                        self,
+                        "Battle Master - Em Desenvolvimento",
+                        f"Você escolheu <b>Battle Master</b>!\n\n"
+                        f"⚠️ <b>Nota:</b> O sistema de manobras e superiority dice ainda está em desenvolvimento.\n\n"
+                        f"Por enquanto, você precisará gerenciar manualmente:\n"
+                        f"• Escolha de 3 manobras\n"
+                        f"• Superiority dice (4d8, depois 5d8 no nível 7, 6d8 no nível 15)\n"
+                        f"• Efeitos das manobras em combate\n\n"
+                        f"Use a seção de notas ou edição avançada para rastrear suas escolhas."
+                    )
+                else:
+                    QMessageBox.information(
+                        self,
+                        "Subclasse Selecionada",
+                        f"Você escolheu a subclasse: <b>{selected_subclass}</b>\n\n"
+                        f"Esta subclasse agora faz parte do seu personagem!"
+                    )
     
     def check_missing_subclass(self):
         """Verifica se personagem está em nível de subclasse mas não tem uma escolhida"""
@@ -2441,15 +2575,33 @@ class CharacterSheetTab(QWidget):
                             if skill not in self.character.skill_proficiencies:
                                 self.character.skill_proficiencies.append(skill)
                 
+                # Configurar spellcasting para Eldritch Knight
+                if selected_subclass == "Eldritch Knight":
+                    self.setup_eldritch_knight_spellcasting()
+                
                 self.update_display()
                 self.character_updated.emit()
                 
-                QMessageBox.information(
-                    self,
-                    "Subclasse Selecionada",
-                    f"Você escolheu a subclasse: <b>{selected_subclass}</b>\n\n"
-                    f"Esta subclasse agora faz parte do seu personagem!"
-                )
+                # Aviso especial para Battle Master
+                if selected_subclass == "Battle Master":
+                    QMessageBox.information(
+                        self,
+                        "Battle Master - Em Desenvolvimento",
+                        f"Você escolheu <b>Battle Master</b>!\n\n"
+                        f"⚠️ <b>Nota:</b> O sistema de manobras e superiority dice ainda está em desenvolvimento.\n\n"
+                        f"Por enquanto, você precisará gerenciar manualmente:\n"
+                        f"• Escolha de 3 manobras\n"
+                        f"• Superiority dice (4d8, depois 5d8 no nível 7, 6d8 no nível 15)\n"
+                        f"• Efeitos das manobras em combate\n\n"
+                        f"Use a seção de notas ou edição avançada para rastrear suas escolhas."
+                    )
+                else:
+                    QMessageBox.information(
+                        self,
+                        "Subclasse Selecionada",
+                        f"Você escolheu a subclasse: <b>{selected_subclass}</b>\n\n"
+                        f"Esta subclasse agora faz parte do seu personagem!"
+                    )
     
     def check_and_select_feat(self, level: int):
         """Verifica se o personagem ganhou Feat/ASI e permite seleção"""
@@ -2734,6 +2886,27 @@ class CharacterSheetTab(QWidget):
             f"Descanso curto iniciado.\n\n{info}\n\nVocê pode rolar dados de vida para recuperar HP.\nCada dado de vida recupera 1d{self.character.character_class.hit_die if self.character.character_class else 6} + modificador de CON."
         )
     
+    def open_notes(self):
+        """Abre janela de anotações"""
+        from gui.notes_window import NotesWindow
+        
+        # Criar janela de notas
+        notes_window = NotesWindow(self.character, self)
+        
+        # Conectar sinal de atualização
+        notes_window.notes_updated.connect(self.on_notes_updated)
+        
+        # Mostrar janela (não-modal, pode ficar aberta)
+        notes_window.show()
+    
+    def on_notes_updated(self):
+        """Callback quando notas são atualizadas"""
+        self.character_updated.emit()
+        
+        # Salvar personagem automaticamente
+        if hasattr(self.parent(), 'save_character'):
+            self.parent().save_character()
+    
     def long_rest(self):
         """Descanso longo"""
         result = QMessageBox.question(
@@ -2753,6 +2926,32 @@ class CharacterSheetTab(QWidget):
                 "Descanso Longo Completo",
                 f"{message}\n\nHP: {self.character.current_hit_points}/{self.character.max_hit_points}"
             )
+    
+    def setup_eldritch_knight_spellcasting(self):
+        """Configura spellcasting para Eldritch Knight"""
+        from models.spellcasting import SpellcastingInfo, SpellSlotTable
+        
+        # Se já tem spellcasting configurado, não faz nada
+        if self.character.spellcasting:
+            return
+        
+        # Calcular modificador de Intelligence
+        int_modifier = self.character.stats.get_modifier('intelligence')
+        
+        # Criar SpellcastingInfo para Eldritch Knight
+        self.character.spellcasting = SpellcastingInfo(
+            spellcasting_ability='intelligence',  # Eldritch Knight usa Intelligence
+            spell_save_dc=8 + self.character.proficiency_bonus + int_modifier,
+            spell_attack_bonus=self.character.proficiency_bonus + int_modifier
+        )
+        
+        # Configurar spell slots baseado no nível (1/3 caster)
+        # Eldritch Knight começa a conjurar no nível 3
+        if self.character.level >= 3:
+            # Usa a tabela de 1/3 caster
+            slots = SpellSlotTable.get_third_caster_slots(self.character.level)
+            self.character.spellcasting.max_spell_slots = slots
+            self.character.spellcasting.current_spell_slots = slots.copy()
     
     def set_character(self, character: Character):
         """Define um novo personagem"""

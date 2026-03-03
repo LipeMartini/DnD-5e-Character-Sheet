@@ -58,6 +58,9 @@ class Character:
     # Subclass (Arquétipo de classe)
     subclass_name: Optional[str] = None
     
+    # Notas do personagem (organizadas por categoria)
+    notes: Dict[str, str] = field(default_factory=dict)
+    
     def __post_init__(self):
         self.update_derived_stats()
     
@@ -391,7 +394,7 @@ class Character:
         """Verifica se a classe prepara magias (vs conhece magias)"""
         if not self.character_class:
             return False
-        return SpellSlotTable.uses_prepared_spells(self.character_class.name)
+        return SpellSlotTable.uses_prepared_spells(self)
     
     def get_max_prepared_spells(self) -> int:
         """Retorna o número máximo de magias que podem ser preparadas"""
@@ -521,6 +524,23 @@ class Character:
                 if weapon_prof not in self.weapon_proficiencies:
                     self.weapon_proficiencies.append(weapon_prof)
     
+    def get_critical_range(self) -> int:
+        """
+        Retorna o valor mínimo para crítico (normalmente 20, mas Champion tem 19 ou 18)
+        
+        Returns:
+            Valor mínimo do d20 para crítico (18, 19, ou 20)
+        """
+        # Champion Fighter tem crítico expandido
+        if self.subclass_name == "Champion":
+            if self.level >= 15:
+                return 18  # Superior Critical (18-20)
+            elif self.level >= 3:
+                return 19  # Improved Critical (19-20)
+        
+        # Padrão para todas as outras classes/subclasses
+        return 20
+    
     def get_class_feature_description(self, feature_name: str) -> str:
         """
         Retorna a descrição de uma feature de classe
@@ -601,6 +621,7 @@ class Character:
             'fighting_styles': self.fighting_styles,
             'feats': self.feats,
             'subclass_name': self.subclass_name,
+            'notes': self.notes,
         }
     
     @classmethod
@@ -655,6 +676,7 @@ class Character:
         char.fighting_styles = data.get('fighting_styles', [])
         char.feats = data.get('feats', [])
         char.subclass_name = data.get('subclass_name')
+        char.notes = data.get('notes', {})
         
         return char
     

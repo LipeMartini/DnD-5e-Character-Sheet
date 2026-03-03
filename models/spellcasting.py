@@ -169,6 +169,13 @@ class SpellSlotTable:
     }
     
     @staticmethod
+    def get_third_caster_slots(level: int) -> List[int]:
+        """Retorna os spell slots para 1/3 casters (Eldritch Knight, Arcane Trickster)"""
+        if level < 1 or level > 20:
+            return [0] * 10
+        return SpellSlotTable.THIRD_CASTER_SLOTS.get(level, [0] * 10)
+    
+    @staticmethod
     def get_spell_slots(class_name: str, level: int) -> List[int]:
         """Retorna os spell slots para uma classe e nível específicos"""
         if level < 1 or level > 20:
@@ -235,10 +242,25 @@ class SpellSlotTable:
         return cantrips
     
     @staticmethod
-    def get_spells_known(class_name: str, level: int) -> int:
-        """Retorna quantas magias a classe conhece (para classes que não preparam)"""
+    def get_spells_known(character, level: int) -> int:
+        """Retorna quantas magias o personagem conhece (para classes que não preparam)"""
+        # Determinar qual "classe" usar para a tabela
+        # Prioriza subclasse se for spellcaster (Eldritch Knight, Arcane Trickster)
+        lookup_name = None
+        
+        if hasattr(character, 'subclass_name') and character.subclass_name:
+            if character.subclass_name in ['Eldritch Knight', 'Arcane Trickster']:
+                lookup_name = character.subclass_name
+        
+        # Se não é subclasse spellcaster, usa a classe principal
+        if not lookup_name and character.character_class:
+            lookup_name = character.character_class.name
+        
+        if not lookup_name:
+            return 0
+        
         # Wizard e Cleric preparam, não têm limite de "conhecidas" (têm spellbook/domínio)
-        if class_name in ['Wizard', 'Cleric', 'Druid', 'Paladin']:
+        if lookup_name in ['Wizard', 'Cleric', 'Druid', 'Paladin']:
             return 999  # Sem limite (preparam do total disponível)
         
         spells_known_tables = {
@@ -246,9 +268,11 @@ class SpellSlotTable:
             'Bard': {1: 4, 2: 5, 3: 6, 4: 7, 5: 8, 6: 9, 7: 10, 8: 11, 9: 12, 10: 14, 11: 15, 12: 15, 13: 16, 14: 18, 15: 19, 16: 19, 17: 20, 18: 22, 19: 22, 20: 22},
             'Ranger': {1: 0, 2: 2, 3: 3, 4: 3, 5: 4, 6: 4, 7: 5, 8: 5, 9: 6, 10: 6, 11: 7, 12: 7, 13: 8, 14: 8, 15: 9, 16: 9, 17: 10, 18: 10, 19: 11, 20: 11},
             'Warlock': {1: 2, 2: 3, 3: 4, 4: 5, 5: 6, 6: 7, 7: 8, 8: 9, 9: 10, 10: 10, 11: 11, 12: 11, 13: 12, 14: 12, 15: 13, 16: 13, 17: 14, 18: 14, 19: 15, 20: 15},
+            'Arcane Trickster': {1: 0, 2: 0, 3: 3, 4: 4, 5: 4, 6: 4, 7: 5, 8: 6, 9: 6, 10: 7, 11: 8, 12: 8, 13: 9, 14: 10, 15: 10, 16: 11, 17: 11, 18: 11, 19: 12, 20: 13},
+            'Eldritch Knight': {1: 0, 2: 0, 3: 3, 4: 4, 5: 4, 6: 4, 7: 5, 8: 6, 9: 6, 10: 7, 11: 8, 12: 8, 13: 9, 14: 10, 15: 10, 16: 11, 17: 11, 18: 11, 19: 12, 20: 13}
         }
         
-        if class_name not in spells_known_tables:
+        if lookup_name not in spells_known_tables:
             return 0
         
-        return spells_known_tables[class_name].get(level, 0)
+        return spells_known_tables[lookup_name].get(level, 0)
