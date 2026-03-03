@@ -4,11 +4,13 @@ from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QFormLayout,
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QFont, QPalette, QColor
 from models import Character
+from models.expertise_rules import get_expertise_choices_for_level
 from .dice_history_window import DiceHistoryWindow
 from .inventory_window import InventoryWindow
 from .advanced_edit_window import AdvancedEditWindow
 from .fighting_style_dialog import FightingStyleDialog
 from .feat_dialog import FeatDialog
+from .expertise_selection_dialog import ExpertiseSelectionDialog
 
 class CharacterSheetTab(QWidget):
     character_updated = pyqtSignal()
@@ -1156,7 +1158,11 @@ class CharacterSheetTab(QWidget):
             ability = widgets['ability']
             modifier = self.character.stats.get_modifier(ability)
             
-            if skill_name in self.character.skill_proficiencies:
+            if hasattr(self.character, 'skill_expertise') and skill_name in getattr(self.character, 'skill_expertise', []):
+                modifier += (2 * self.character.proficiency_bonus)
+                widgets['prof'].setText("◆")
+                widgets['prof'].setStyleSheet("color: #DAA520; background-color: transparent; font-weight: bold;")
+            elif skill_name in self.character.skill_proficiencies:
                 modifier += self.character.proficiency_bonus
                 widgets['prof'].setText("●")
                 widgets['prof'].setStyleSheet("color: #228B22; background-color: transparent; font-weight: bold;")
@@ -2321,6 +2327,21 @@ class CharacterSheetTab(QWidget):
                 new_level
             )
         
+        # Adicionar features de subclasse do novo nível (se tiver subclasse)
+        if self.character.subclass_name:
+            from models import SubclassDatabase
+            subclass = SubclassDatabase.get_subclass(
+                self.character.character_class.name,
+                self.character.subclass_name
+            )
+            if subclass:
+                subclass_features = subclass.get_features_at_level(new_level)
+                for feature in subclass_features:
+                    feature_text = f"{feature.name} ({self.character.subclass_name})"
+                    if feature_text not in self.character.class_features:
+                        self.character.class_features.append(feature_text)
+                        new_features.append(feature_text)
+        
         # Atualizar display
         self.update_display()
         self.character_updated.emit()
@@ -2343,17 +2364,54 @@ class CharacterSheetTab(QWidget):
             )
         
         # DEPOIS das features, verificar escolhas em ordem:
-        # 1. Fighting Style
+        # 1. Expertise (Rogue/Bard)
+        self.check_and_select_expertise(new_level)
+        # 2. Fighting Style
         self.check_and_select_fighting_style(new_level)
         
-        # 2. Additional Fighting Style (Champion nível 10)
+        # 3. Additional Fighting Style (Champion nível 10)
         self.check_champion_additional_fighting_style(new_level)
         
-        # 3. Subclasse
+        # 4. Subclasse
         self.check_and_select_subclass(new_level)
         
-        # 4. Feat/ASI
+        # 5. Feat/ASI
         self.check_and_select_feat(new_level)
+
+    def check_and_select_expertise(self, level: int):
+        """Verifica se o personagem deve escolher Expertise neste nível."""
+        if not self.character.character_class:
+            return
+        class_name = self.character.character_class.name
+        num_choices = get_expertise_choices_for_level(class_name, level)
+        if num_choices <= 0:
+            return
+        eligible_skills = sorted([
+            skill for skill in self.character.skill_proficiencies
+            if skill not in self.character.skill_expertise
+        ])
+        if not eligible_skills:
+            QMessageBox.information(
+                self,
+                "Sem perícias elegíveis",
+                "Você ainda não possui perícias com proficiência suficientes para escolher Expertise neste nível.",
+            )
+            return
+        dialog = ExpertiseSelectionDialog(
+            self.character,
+            num_choices,
+            eligible_skills,
+            parent=self,
+            title="Selecionar perícias com Expertise",
+        )
+        if dialog.exec():
+            for skill in dialog.get_selected_skills():
+                if skill not in self.character.skill_proficiencies:
+                    self.character.skill_proficiencies.append(skill)
+                if skill not in self.character.skill_expertise:
+                    self.character.skill_expertise.append(skill)
+            self.update_display()
+            self.character_updated.emit()
     
     def check_and_select_fighting_style(self, level: int):
         """Verifica se o personagem ganhou Fighting Style e permite seleção"""
@@ -2491,6 +2549,10 @@ class CharacterSheetTab(QWidget):
                 if selected_subclass == "Eldritch Knight":
                     self.setup_eldritch_knight_spellcasting()
                 
+                # Configurar spellcasting para Arcane Trickster
+                if selected_subclass == "Arcane Trickster":
+                    self.setup_arcane_trickster_spellcasting()
+                
                 self.update_display()
                 self.character_updated.emit()
                 
@@ -2578,6 +2640,10 @@ class CharacterSheetTab(QWidget):
                 # Configurar spellcasting para Eldritch Knight
                 if selected_subclass == "Eldritch Knight":
                     self.setup_eldritch_knight_spellcasting()
+                
+                # Configurar spellcasting para Arcane Trickster
+                if selected_subclass == "Arcane Trickster":
+                    self.setup_arcane_trickster_spellcasting()
                 
                 self.update_display()
                 self.character_updated.emit()
@@ -2785,7 +2851,9 @@ class CharacterSheetTab(QWidget):
         from models import DiceRoller
         
         modifier = self.character.stats.get_modifier(ability)
-        if skill_name in self.character.skill_proficiencies:
+        if skill_name in getattr(self.character, 'skill_expertise', []):
+            modifier += 2 * self.character.proficiency_bonus
+        elif skill_name in self.character.skill_proficiencies:
             modifier += self.character.proficiency_bonus
         
         # Rola com vantagem/desvantagem se ativo
@@ -2947,6 +3015,32 @@ class CharacterSheetTab(QWidget):
         
         # Configurar spell slots baseado no nível (1/3 caster)
         # Eldritch Knight começa a conjurar no nível 3
+        if self.character.level >= 3:
+            # Usa a tabela de 1/3 caster
+            slots = SpellSlotTable.get_third_caster_slots(self.character.level)
+            self.character.spellcasting.max_spell_slots = slots
+            self.character.spellcasting.current_spell_slots = slots.copy()
+    
+    def setup_arcane_trickster_spellcasting(self):
+        """Configura spellcasting para Arcane Trickster"""
+        from models.spellcasting import SpellcastingInfo, SpellSlotTable
+        
+        # Se já tem spellcasting configurado, não faz nada
+        if self.character.spellcasting:
+            return
+        
+        # Calcular modificador de Intelligence
+        int_modifier = self.character.stats.get_modifier('intelligence')
+        
+        # Criar SpellcastingInfo para Arcane Trickster
+        self.character.spellcasting = SpellcastingInfo(
+            spellcasting_ability='intelligence',  # Arcane Trickster usa Intelligence
+            spell_save_dc=8 + self.character.proficiency_bonus + int_modifier,
+            spell_attack_bonus=self.character.proficiency_bonus + int_modifier
+        )
+        
+        # Configurar spell slots baseado no nível (1/3 caster)
+        # Arcane Trickster começa a conjurar no nível 3
         if self.character.level >= 3:
             # Usa a tabela de 1/3 caster
             slots = SpellSlotTable.get_third_caster_slots(self.character.level)

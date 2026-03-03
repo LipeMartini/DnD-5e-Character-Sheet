@@ -6,9 +6,9 @@ CHECK --- Quarto: Ataques e armas (integração com sistema de dados)
 CHECK --- Quinto: Sistema de magias (banco de dados maior, filtros, busca)
 
 
-
---------------- FALTA EXPERTISE !!!  		------------------------
---------------- E PROFICIÊNCIA DE ARMADURA  	------------------------
+---------------     		FALTA EXPERTISE !!!  		------------------------
+---------------      Mais subclasses de Clérigo e Wizard  	------------------------
+---------------      		   Mais Feats  			------------------------
 
 
 Básico:
@@ -37,7 +37,7 @@ Básico:
 3.3 Feats								- CHECK
 3.3.1 Interação de Feats com Spells
 
-4. Notas e Biografia do Personagem					- NEXT TO BE DONE
+4. Notas e Biografia do Personagem					- CHECK
 	Campo de texto para história/background
 	Notas de sessão
 	Objetivos e motivações

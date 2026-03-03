@@ -35,6 +35,8 @@ class Character:
     proficiency_bonus: int = 2
     
     skill_proficiencies: List[str] = field(default_factory=list)
+    # Perícias com Expertise (bônus de proficiência dobrado)
+    skill_expertise: List[str] = field(default_factory=list)
     saving_throw_proficiencies: List[str] = field(default_factory=list)
     weapon_proficiencies: List[str] = field(default_factory=list)
     armor_proficiencies: List[str] = field(default_factory=list)
@@ -272,7 +274,10 @@ class Character:
     def roll_skill_check(self, skill: str, ability: str) -> tuple[int, int]:
         """Rola teste de perícia"""
         modifier = self.stats.get_modifier(ability)
-        if skill in self.skill_proficiencies:
+        # Expertise tem precedência e dobra o bônus de proficiência
+        if skill in self.skill_expertise:
+            modifier += (2 * self.proficiency_bonus)
+        elif skill in self.skill_proficiencies:
             modifier += self.proficiency_bonus
         return DiceRoller.roll_d20(modifier)
     
@@ -366,8 +371,26 @@ class Character:
         
         # Verifica se a classe é conjuradora
         caster_classes = ['Wizard', 'Sorcerer', 'Cleric', 'Druid', 'Bard', 'Warlock', 'Paladin', 'Ranger']
+        
+        # Subclasses que conjuram magias (não remover spellcasting delas!)
+        spellcasting_subclasses = ['Eldritch Knight', 'Arcane Trickster']
+        
+        # Se não é uma classe conjuradora E não tem uma subclasse conjuradora, remove spellcasting
         if class_name not in caster_classes:
-            self.spellcasting = None
+            if not (self.subclass_name and self.subclass_name in spellcasting_subclasses):
+                self.spellcasting = None
+                return
+            # Se tem subclasse conjuradora, não inicializa automaticamente (já foi configurado)
+            # Apenas atualiza os spell slots se já existe spellcasting
+            if self.spellcasting:
+                from models.spellcasting import SpellSlotTable
+                slots = SpellSlotTable.get_third_caster_slots(self.level)
+                self.spellcasting.max_spell_slots = slots
+                self.spellcasting.current_spell_slots = slots.copy()
+                # Recalcula DC e bônus
+                ability_mod = self.stats.get_modifier(self.spellcasting.spellcasting_ability)
+                self.spellcasting.spell_save_dc = 8 + self.proficiency_bonus + ability_mod
+                self.spellcasting.spell_attack_bonus = self.proficiency_bonus + ability_mod
             return
         
         # Cria SpellcastingInfo se não existir
@@ -609,6 +632,7 @@ class Character:
             'speed': self.speed,
             'proficiency_bonus': self.proficiency_bonus,
             'skill_proficiencies': self.skill_proficiencies,
+            'skill_expertise': self.skill_expertise,
             'saving_throw_proficiencies': self.saving_throw_proficiencies,
             'weapon_proficiencies': self.weapon_proficiencies,
             'armor_proficiencies': self.armor_proficiencies,
@@ -659,6 +683,7 @@ class Character:
         char.speed = data.get('speed', 30)
         char.proficiency_bonus = data.get('proficiency_bonus', 2)
         char.skill_proficiencies = data.get('skill_proficiencies', [])
+        char.skill_expertise = data.get('skill_expertise', [])
         char.saving_throw_proficiencies = data.get('saving_throw_proficiencies', [])
         char.weapon_proficiencies = data.get('weapon_proficiencies', [])
         char.armor_proficiencies = data.get('armor_proficiencies', [])

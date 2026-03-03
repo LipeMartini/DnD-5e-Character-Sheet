@@ -260,10 +260,12 @@ class AdvancedEditWindow(QDialog):
         scroll_widget = QWidget()
         scroll_layout = QVBoxLayout(scroll_widget)
         
-        skills_group = QGroupBox("Proficiências em Perícias")
+        skills_group = QGroupBox("Perícias: Proficiência x Expertise (excludentes)")
         skills_layout = QVBoxLayout()
         
-        self.skill_checkboxes = {}
+        # Dicionários de checkboxes
+        self.skill_prof_checkboxes = {}
+        self.skill_expert_checkboxes = {}
         
         # Perícias organizadas por atributo
         skills_by_ability = {
@@ -303,10 +305,23 @@ class AdvancedEditWindow(QDialog):
             skills_layout.addWidget(separator)
             
             for skill in skills:
-                checkbox = QCheckBox(skill_translations.get(skill, skill))
-                checkbox.setFont(QFont("Georgia", 10))
-                self.skill_checkboxes[skill] = checkbox
-                skills_layout.addWidget(checkbox)
+                row = QHBoxLayout()
+                label = QLabel(skill_translations.get(skill, skill))
+                label.setFont(QFont("Georgia", 10))
+                prof_cb = QCheckBox("Proficiente")
+                expert_cb = QCheckBox("Expertise")
+                # Ligações para exclusividade mútua
+                prof_cb.toggled.connect(lambda checked, s=skill: self.on_prof_toggled(s, checked))
+                expert_cb.toggled.connect(lambda checked, s=skill: self.on_expert_toggled(s, checked))
+                
+                self.skill_prof_checkboxes[skill] = prof_cb
+                self.skill_expert_checkboxes[skill] = expert_cb
+                
+                row.addWidget(label)
+                row.addStretch(1)
+                row.addWidget(prof_cb)
+                row.addWidget(expert_cb)
+                skills_layout.addLayout(row)
         
         skills_group.setLayout(skills_layout)
         scroll_layout.addWidget(skills_group)
@@ -316,12 +331,28 @@ class AdvancedEditWindow(QDialog):
         layout.addWidget(scroll)
         
         # Info
-        info_label = QLabel("💡 Dica: Marque as perícias nas quais o personagem é proficiente. Isso adiciona o bônus de proficiência aos testes.")
+        info_label = QLabel("💡 Dica: Expertise dobra o bônus de proficiência e é mutuamente excludente com a proficiência simples.")
         info_label.setWordWrap(True)
         info_label.setStyleSheet("color: #666; font-style: italic; padding: 10px;")
         layout.addWidget(info_label)
         
         return tab
+
+    def on_prof_toggled(self, skill: str, checked: bool):
+        """Garante exclusividade: proficiência simples x expertise"""
+        expert_cb = self.skill_expert_checkboxes.get(skill)
+        if checked and expert_cb and expert_cb.isChecked():
+            expert_cb.blockSignals(True)
+            expert_cb.setChecked(False)
+            expert_cb.blockSignals(False)
+    
+    def on_expert_toggled(self, skill: str, checked: bool):
+        """Garante exclusividade: proficiência simples x expertise"""
+        prof_cb = self.skill_prof_checkboxes.get(skill)
+        if checked and prof_cb and prof_cb.isChecked():
+            prof_cb.blockSignals(True)
+            prof_cb.setChecked(False)
+            prof_cb.blockSignals(False)
     
     def load_values(self):
         """Carrega valores atuais do personagem"""
@@ -342,9 +373,13 @@ class AdvancedEditWindow(QDialog):
         self.speed_spin.setValue(self.character.speed)
         self.initiative_spin.setValue(self.character.initiative)
         
-        # Perícias
-        for skill, checkbox in self.skill_checkboxes.items():
-            checkbox.setChecked(skill in self.character.skill_proficiencies)
+        # Perícias (proficiente x expertise)
+        for skill, cb in self.skill_prof_checkboxes.items():
+            is_expert = skill in getattr(self.character, 'skill_expertise', [])
+            is_prof = (skill in self.character.skill_proficiencies) and not is_expert
+            cb.setChecked(is_prof)
+        for skill, cb in self.skill_expert_checkboxes.items():
+            cb.setChecked(skill in getattr(self.character, 'skill_expertise', []))
     
     def save_changes(self):
         """Salva as alterações no personagem"""
@@ -371,10 +406,14 @@ class AdvancedEditWindow(QDialog):
         self.character.current_hit_points = self.current_hp_spin.value()
         self.character.temporary_hit_points = self.temp_hp_spin.value()
         
-        # Perícias
+        # Perícias (salva listas exclusivas)
         self.character.skill_proficiencies = [
-            skill for skill, checkbox in self.skill_checkboxes.items()
-            if checkbox.isChecked()
+            skill for skill, cb in self.skill_prof_checkboxes.items()
+            if cb.isChecked()
+        ]
+        self.character.skill_expertise = [
+            skill for skill, cb in self.skill_expert_checkboxes.items()
+            if cb.isChecked()
         ]
         
         # Recalcula estatísticas derivadas (isso pode sobrescrever speed e initiative)

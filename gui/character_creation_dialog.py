@@ -3,6 +3,8 @@ from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QFormLayout,
                              QGroupBox, QLabel, QListWidget, QMessageBox, QScrollArea, QWidget)
 from PyQt6.QtCore import Qt
 from models import Character, RaceDatabase, SubraceDatabase, ClassDatabase, BackgroundDatabase, DiceRoller
+from models.expertise_rules import get_expertise_choices_for_level
+from .expertise_selection_dialog import ExpertiseSelectionDialog
 
 class CharacterCreationDialog(QDialog):
     def __init__(self, parent=None):
@@ -175,6 +177,33 @@ class CharacterCreationDialog(QDialog):
             "Rolagem de Atributo",
             f"Rolou 4d6 (manteve os 3 maiores)\nResultados: {rolls}\nTotal: {total}"
         )
+
+    def handle_initial_expertise(self):
+        """Permite escolher Expertise disponível já no nível inicial."""
+        if not self.character.character_class:
+            return
+        class_name = self.character.character_class.name
+        level = self.character.level
+        num_choices = get_expertise_choices_for_level(class_name, level)
+        if num_choices <= 0:
+            return
+        eligible_skills = sorted([
+            skill for skill in self.character.skill_proficiencies
+            if skill not in self.character.skill_expertise
+        ])
+        if not eligible_skills:
+            return
+        dialog = ExpertiseSelectionDialog(
+            self.character,
+            num_choices,
+            eligible_skills,
+            parent=self,
+            title="Selecionar perícias com Expertise",
+        )
+        if dialog.exec():
+            for skill in dialog.get_selected_skills():
+                if skill not in self.character.skill_expertise:
+                    self.character.skill_expertise.append(skill)
     
     def roll_all_stats(self):
         results = []
@@ -341,6 +370,9 @@ class CharacterCreationDialog(QDialog):
                 self.character.character_class.name,
                 1
             )
+
+        # Expertise inicial (ex: Rogue nível 1)
+        self.handle_initial_expertise()
         
         self.character.update_derived_stats()
         
