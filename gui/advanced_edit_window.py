@@ -416,12 +416,12 @@ class AdvancedEditWindow(QDialog):
             if cb.isChecked()
         ]
         
-        # Recalcula estatísticas derivadas (isso pode sobrescrever speed e initiative)
+        # Recalcula estatísticas derivadas (CA, iniciativa, velocidade, etc.)
         self.character.update_derived_stats()
         
-        # Aplica valores manuais de speed e initiative DEPOIS do recálculo
+        # Aplica valor manual de speed DEPOIS do recálculo (se o usuário alterou manualmente)
+        # Iniciativa é calculada automaticamente baseada em DEX + feat Alert
         self.character.speed = self.speed_spin.value()
-        self.character.initiative = self.initiative_spin.value()
         
         # Emite sinal de atualização
         self.character_updated.emit()

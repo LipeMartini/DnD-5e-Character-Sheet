@@ -5,6 +5,7 @@ from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel,
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QFont
 from models.feats import get_available_feats, ABILITY_SCORE_IMPROVEMENT
+from .magic_initiate_dialog import MagicInitiateDialog
 
 class FeatDialog(QDialog):
     """Dialog para seleção de Feat (incluindo ASI)"""
@@ -14,6 +15,8 @@ class FeatDialog(QDialog):
         self.character = character
         self.selected_feat = None
         self.asi_choice = None  # Para ASI: {"type": "single", "stat": "strength"} ou {"type": "double", "stat1": "str", "stat2": "dex"}
+        self.half_feat_choice = None  # Para feats que concedem +1 em atributo específico
+        self.magic_initiate_choice = None
         
         self.setWindowTitle("Escolher Feat ou ASI")
         self.setModal(True)
@@ -157,6 +160,24 @@ class FeatDialog(QDialog):
         
         self.asi_panel.setLayout(asi_layout)
         right_layout.addWidget(self.asi_panel)
+
+        # Painel para Half Feats (um atributo específico)
+        self.half_feat_panel = QGroupBox("Aumento de Atributo do Feat")
+        self.half_feat_panel.setFont(QFont("Georgia", 10, QFont.Weight.Bold))
+        self.half_feat_panel.setStyleSheet(self.asi_panel.styleSheet())
+        self.half_feat_panel.setVisible(False)
+
+        half_layout = QVBoxLayout()
+        self.half_feat_label = QLabel("Selecione o atributo para receber +1")
+        self.half_feat_label.setFont(QFont("Georgia", 9))
+        half_layout.addWidget(self.half_feat_label)
+
+        self.half_feat_combo = QComboBox()
+        self.half_feat_combo.setFont(QFont("Georgia", 9))
+        half_layout.addWidget(self.half_feat_combo)
+
+        self.half_feat_panel.setLayout(half_layout)
+        right_layout.addWidget(self.half_feat_panel)
         
         content_layout.addLayout(right_layout, 1)
         
@@ -265,6 +286,13 @@ class FeatDialog(QDialog):
         
         # Mostra/oculta painel de ASI
         self.asi_panel.setVisible(feat.is_asi)
+
+        # Configura painel de half feat quando aplicável
+        if not feat.is_asi and feat.ability_increase_options:
+            self.half_feat_panel.setVisible(True)
+            self.populate_half_feat_combo(feat)
+        else:
+            self.half_feat_panel.setVisible(False)
         
         self.select_button.setEnabled(True)
     
@@ -340,6 +368,43 @@ class FeatDialog(QDialog):
                     "stat1": stat1_name,
                     "stat2": stat2_name
                 }
+            self.half_feat_choice = None
+        else:
+            self.asi_choice = None
+            if feat.ability_increase_options:
+                stat_choice = self.half_feat_combo.currentData()
+                if stat_choice is None:
+                    QMessageBox.warning(
+                        self,
+                        "Seleção obrigatória",
+                        "Escolha um atributo para receber o bônus de +1 do feat."
+                    )
+                    return
+                current_value = getattr(self.character.stats, stat_choice, 0)
+                if current_value >= 20:
+                    QMessageBox.warning(
+                        self,
+                        "Limite de Atributo",
+                        "O atributo selecionado já está no máximo (20). Escolha outro atributo."
+                    )
+                    return
+                self.half_feat_choice = stat_choice
+            else:
+                self.half_feat_choice = None
+
+            if feat.name == "Magic Initiate":
+                magic_dialog = MagicInitiateDialog(self)
+                if magic_dialog.exec():
+                    self.magic_initiate_choice = magic_dialog.get_selection()
+                else:
+                    QMessageBox.warning(
+                        self,
+                        "Seleção obrigatória",
+                        "É necessário escolher a classe e magias para Magic Initiate."
+                    )
+                    return
+            else:
+                self.magic_initiate_choice = None
         
         self.selected_feat = feat
         self.accept()
@@ -351,3 +416,27 @@ class FeatDialog(QDialog):
     def get_asi_choice(self):
         """Retorna a escolha de ASI (se aplicável)"""
         return self.asi_choice
+
+    def get_half_feat_ability(self):
+        """Retorna o atributo escolhido para feats que concedem +1"""
+        return self.half_feat_choice
+
+    def get_magic_initiate_choice(self):
+        """Retorna a seleção de magias para Magic Initiate (se aplicável)."""
+        return self.magic_initiate_choice
+
+    def populate_half_feat_combo(self, feat):
+        """Popula combo de half feat com atributos elegíveis"""
+        self.half_feat_combo.clear()
+        options = feat.ability_increase_options or []
+        for stat in options:
+            display = {
+                "strength": "Força (Strength)",
+                "dexterity": "Destreza (Dexterity)",
+                "constitution": "Constituição (Constitution)",
+                "intelligence": "Inteligência (Intelligence)",
+                "wisdom": "Sabedoria (Wisdom)",
+                "charisma": "Carisma (Charisma)",
+            }.get(stat, stat.capitalize())
+            current = getattr(self.character.stats, stat, 0)
+            self.half_feat_combo.addItem(f"{display} ({current})", stat)

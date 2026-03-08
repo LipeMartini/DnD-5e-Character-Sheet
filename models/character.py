@@ -8,6 +8,7 @@ from .character_class import CharacterClass, ClassDatabase
 from .background import Background, BackgroundDatabase
 from .dice import DiceRoller
 from .inventory import Inventory
+from .armor import Armor
 from .spellcasting import SpellcastingInfo, SpellSlotTable
 
 @dataclass
@@ -62,6 +63,9 @@ class Character:
     
     # Notas do personagem (organizadas por categoria)
     notes: Dict[str, str] = field(default_factory=dict)
+
+    # Seleções de magias vindas de feats (ex: Magic Initiate)
+    magic_initiate_choices: List[dict] = field(default_factory=list)
     
     def __post_init__(self):
         self.update_derived_stats()
@@ -154,6 +158,33 @@ class Character:
         # Aplica bônus de Mobile (+10 velocidade)
         if self.has_feat("Mobile"):
             self.speed += 10
+
+        # Fast Movement (Barbarian nível 5+) se não estiver usando armadura pesada
+        if self.character_class and self.character_class.name == "Barbarian" and self.level >= 5:
+            armor = self.inventory.get_equipped_armor()
+            wearing_heavy_armor = armor and armor.armor_type == Armor.HEAVY
+            if not wearing_heavy_armor:
+                self.speed += 10
+
+        # Atualiza DC e bônus de ataque de magias com base nos valores atuais
+        self.update_spellcasting_stats()
+
+    def update_spellcasting_stats(self):
+        """Recalcula CD e bônus de ataque de magia"""
+        if not self.spellcasting:
+            return
+
+        ability = self.spellcasting.spellcasting_ability
+        if not ability and self.character_class:
+            ability = SpellSlotTable.get_spellcasting_ability(self.character_class.name)
+            self.spellcasting.spellcasting_ability = ability
+
+        if not ability:
+            return
+
+        ability_mod = self.stats.get_modifier(ability)
+        self.spellcasting.spell_save_dc = 8 + self.proficiency_bonus + ability_mod
+        self.spellcasting.spell_attack_bonus = self.proficiency_bonus + ability_mod
     
     def set_race(self, race_name: str):
         """Define a raça do personagem e aplica bônus raciais"""
@@ -292,6 +323,12 @@ class Character:
         """Verifica se o personagem possui um trait específico"""
         return trait_name in self.traits
     
+    def add_magic_initiate_choice(self, choice: dict):
+        """Armazena a escolha de magias feita via Magic Initiate"""
+        if not choice:
+            return
+        self.magic_initiate_choices.append(choice)
+    
     def recalculate_max_hp(self):
         """Recalcula HP máximo baseado no nível e constituição"""
         if not self.character_class:
@@ -386,27 +423,22 @@ class Character:
                 slots = SpellSlotTable.get_third_caster_slots(self.level)
                 self.spellcasting.max_spell_slots = slots
                 self.spellcasting.current_spell_slots = slots.copy()
-                # Recalcula DC e bônus
-                ability_mod = self.stats.get_modifier(self.spellcasting.spellcasting_ability)
-                self.spellcasting.spell_save_dc = 8 + self.proficiency_bonus + ability_mod
-                self.spellcasting.spell_attack_bonus = self.proficiency_bonus + ability_mod
+                self.update_spellcasting_stats()
             return
-        
-        # Cria SpellcastingInfo se não existir
+
+        # Se ainda não há spellcasting, inicializa com a habilidade correta
         if not self.spellcasting:
-            self.spellcasting = SpellcastingInfo()
-        
-        # Define habilidade de conjuração
-        self.spellcasting.spellcasting_ability = SpellSlotTable.get_spellcasting_ability(class_name)
-        
-        # Atualiza spell slots baseado no nível
-        self.spellcasting.max_spell_slots = SpellSlotTable.get_spell_slots(class_name, self.level)
-        self.spellcasting.current_spell_slots = self.spellcasting.max_spell_slots.copy()
-        
-        # Calcula DC e bônus de ataque de magia
-        ability_mod = self.stats.get_modifier(self.spellcasting.spellcasting_ability)
-        self.spellcasting.spell_save_dc = 8 + self.proficiency_bonus + ability_mod
-        self.spellcasting.spell_attack_bonus = self.proficiency_bonus + ability_mod
+            casting_ability = SpellSlotTable.get_spellcasting_ability(class_name)
+            self.spellcasting = SpellcastingInfo(spellcasting_ability=casting_ability)
+        else:
+            # Atualiza habilidade se estiver vazia ou padrão
+            if not self.spellcasting.spellcasting_ability or self.spellcasting.spellcasting_ability == 'intelligence':
+                self.spellcasting.spellcasting_ability = SpellSlotTable.get_spellcasting_ability(class_name)
+
+        slots = SpellSlotTable.get_spell_slots(class_name, self.level)
+        self.spellcasting.max_spell_slots = slots
+        self.spellcasting.current_spell_slots = slots.copy()
+        self.update_spellcasting_stats()
     
     def is_spellcaster(self) -> bool:
         """Verifica se o personagem é um conjurador"""
@@ -645,6 +677,7 @@ class Character:
             'feats': self.feats,
             'subclass_name': self.subclass_name,
             'notes': self.notes,
+            'magic_initiate_choices': self.magic_initiate_choices,
         }
     
     @classmethod
@@ -696,11 +729,14 @@ class Character:
         
         if data.get('spellcasting'):
             char.spellcasting = SpellcastingInfo.from_dict(data['spellcasting'])
+            # Recalcula CD e bônus de ataque de magia com base nas stats atuais
+            char.update_spellcasting_stats()
         
         char.fighting_styles = data.get('fighting_styles', [])
         char.feats = data.get('feats', [])
         char.subclass_name = data.get('subclass_name')
         char.notes = data.get('notes', {})
+        char.magic_initiate_choices = data.get('magic_initiate_choices', [])
         
         return char
     

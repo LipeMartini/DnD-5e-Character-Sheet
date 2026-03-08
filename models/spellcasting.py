@@ -23,6 +23,9 @@ class SpellcastingInfo:
     # Cantrips conhecidos
     known_cantrips: List[str] = field(default_factory=list)
     
+    # Tracking de usos diários de Magic Initiate (spell_name -> uses_remaining)
+    magic_initiate_daily_uses: Dict[str, int] = field(default_factory=dict)
+    
     def to_dict(self) -> dict:
         return {
             'spellcasting_ability': self.spellcasting_ability,
@@ -33,6 +36,7 @@ class SpellcastingInfo:
             'known_spells': self.known_spells,
             'prepared_spells': self.prepared_spells,
             'known_cantrips': self.known_cantrips,
+            'magic_initiate_daily_uses': self.magic_initiate_daily_uses,
         }
     
     @classmethod
@@ -55,6 +59,9 @@ class SpellcastingInfo:
     def restore_spell_slots(self):
         """Restaura todos os spell slots (descanso longo)"""
         self.current_spell_slots = self.max_spell_slots.copy()
+        # Restaura usos de Magic Initiate
+        for spell_name in self.magic_initiate_daily_uses:
+            self.magic_initiate_daily_uses[spell_name] = 1
     
     def get_available_slots(self, level: int) -> int:
         """Retorna quantos slots estão disponíveis para um nível"""

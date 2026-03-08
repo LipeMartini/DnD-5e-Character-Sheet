@@ -1,10 +1,7 @@
 python C:\Users\Lipe\Desktop\Portfolio_(Programs)\DnD-Sheet\main.py
 
-
----------------     		FALTA EXPERTISE !!!  		------------------------
----------------      Mais subclasses de Clérigo e Wizard  	------------------------
----------------      		   Mais Feats  			------------------------
-
+----------------------    	TESTAR WARLOCK    	----------------------
+----------------------    TESTAR TODAS SPELL LISTS	----------------------
 
 Básico:
 0. Sistema de Subraças 							- CHECK

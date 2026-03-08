@@ -1,0 +1,109 @@
+Bard Spells Missing:
+
+Blade Ward
+Friends
+
+Dissonant Whispers
+Tasha's Hideous Laughter
+
+Phantasmal Force
+
+Feign Death
+
+Power Word Heal
+
+
+Warlock Spells Missing:
+
+Blade Ward
+Friends
+
+Arcane Gate
+
+
+Cleric Spells Missing:
+
+Feign Death
+
+Divination
+
+
+Druid Spells Missing:
+
+Produce Flame
+
+Beast Sense
+
+Meld Into Stone
+
+Grasping Vine
+
+Animal Shapes
+
+
+Sorcerer Spells Missing:
+
+Blade Ward
+Friends
+
+Chromatic Orb
+Ray of Sickness
+
+Phantasmal Force
+
+Arcane Gate
+
+
+Wizard Spells Missing:
+
+Blade Ward
+Friends
+
+Chromatic Orb
+Ray of Sickness
+
+Phantasmal Force
+
+Feign Death
+
+Arcane Gate
+
+Mind Blank
+
+
+Paladin Spells Missing:
+
+Compelled Duel
+Searing Smite
+Thunderous Smite
+Wrathful Smite
+
+Elemental Weapon
+Aura of Vitality
+Blinding Smite
+Crusader's Mantle
+
+Aura of Life
+Aura of Purity
+Staggering Smite
+
+Branding Smite
+Circle of Power
+Destructive Wave
+
+
+Ranger Spells Missing:
+
+Ensnaring Strike
+Hail of Thorns
+
+Cordon of Arrows
+Beast Sense
+
+Conjure Barrage
+Lightning Arrow
+
+Grasping Vine
+
+Swift Quiver
+Conjure Volley

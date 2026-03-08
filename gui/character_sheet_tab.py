@@ -488,7 +488,6 @@ class CharacterSheetTab(QWidget):
         self.temp_hp_label.setFont(QFont("Georgia", 11))
         self.temp_hp_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.temp_hp_label.setStyleSheet("color: #1E90FF; background-color: transparent;")
-        self.temp_hp_label.setVisible(False)
         hp_display_layout.addWidget(self.temp_hp_label)
         
         hp_layout.addWidget(hp_display)
@@ -564,6 +563,42 @@ class CharacterSheetTab(QWidget):
         heal_layout.addWidget(heal_btn)
         
         hp_layout.addLayout(heal_layout)
+        
+        # Controles de HP Temporário
+        temp_hp_layout = QHBoxLayout()
+        self.temp_hp_spin = QSpinBox()
+        self.temp_hp_spin.setMaximum(999)
+        self.temp_hp_spin.setPrefix("HP Temp: ")
+        self.temp_hp_spin.setMinimumWidth(200)
+        self.temp_hp_spin.setStyleSheet("""
+            QSpinBox {
+                border: 2px solid #654321;
+                border-radius: 5px;
+                min-width: 100px;
+                padding: 8px 15px;
+                font-weight: bold;
+                font-size: 11px;
+            }
+        """)
+        temp_hp_layout.addWidget(self.temp_hp_spin)
+        
+        add_temp_hp_btn = QPushButton("Adicionar")
+        add_temp_hp_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #4682B4;
+                color: #F5EBDC;
+                border: 2px solid #1E90FF;
+                border-radius: 5px;
+                min-width: 100px;
+                padding: 8px 15px;
+                font-weight: bold;
+                font-size: 11px;
+            }
+        """)
+        add_temp_hp_btn.clicked.connect(self.add_temp_hp)
+        temp_hp_layout.addWidget(add_temp_hp_btn)
+        
+        hp_layout.addLayout(temp_hp_layout)
         
         # Botões de Descanso
         short_rest_btn = QPushButton("Descanso Curto")
@@ -1122,6 +1157,15 @@ class CharacterSheetTab(QWidget):
         maximum = self.character.max_hit_points
         self.hp_label.setText(f"{current} / {maximum}")
         
+        # HP Temporário
+        temp_hp = self.character.temporary_hit_points
+        if temp_hp > 0:
+            self.temp_hp_label.setText(f"HP Temp: {temp_hp}")
+            self.temp_hp_label.setStyleSheet("color: #1E90FF; background-color: transparent; font-weight: bold;")
+        else:
+            self.temp_hp_label.setText("HP Temp: 0")
+            self.temp_hp_label.setStyleSheet("color: #1E90FF; background-color: transparent;")
+        
         if maximum > 0:
             hp_percent = (current / maximum) * 100
             if hp_percent > 50:
@@ -1636,9 +1680,19 @@ class CharacterSheetTab(QWidget):
             cast_btn = QPushButton("✨ Conjurar")
             cast_btn.setToolTip("Cantrips podem ser conjurados à vontade")
         else:
+            # Verifica se tem uso gratuito de Magic Initiate para esta magia
+            has_magic_initiate_use = False
+            if spell_name in self.character.spellcasting.magic_initiate_daily_uses:
+                if self.character.spellcasting.magic_initiate_daily_uses[spell_name] > 0:
+                    has_magic_initiate_use = True
+            
             # Magias de nível 1-9 gastam slots
-            cast_btn = QPushButton(f"✨ Conjurar (Nv {spell_level})")
-            cast_btn.setToolTip(f"Gasta 1 spell slot de nível {spell_level}")
+            if has_magic_initiate_use:
+                cast_btn = QPushButton(f"✨ Conjurar (Nv {spell_level}) 🎁")
+                cast_btn.setToolTip(f"Gasta 1 spell slot de nível {spell_level}\n✨ Uso gratuito de Magic Initiate disponível (1x)")
+            else:
+                cast_btn = QPushButton(f"✨ Conjurar (Nv {spell_level})")
+                cast_btn.setToolTip(f"Gasta 1 spell slot de nível {spell_level}")
         
         cast_btn.setFont(QFont("Georgia", 8))
         cast_btn.setMaximumWidth(150)
@@ -1667,9 +1721,22 @@ class CharacterSheetTab(QWidget):
         # Desabilita se não tiver slots disponíveis (exceto cantrips)
         if spell_level > 0:
             available_slots = self.character.spellcasting.current_spell_slots[spell_level] if spell_level < len(self.character.spellcasting.current_spell_slots) else 0
-            if available_slots <= 0:
+            
+            # Verifica se tem uso gratuito de Magic Initiate
+            has_magic_initiate_use = False
+            if spell_name in self.character.spellcasting.magic_initiate_daily_uses:
+                if self.character.spellcasting.magic_initiate_daily_uses[spell_name] > 0:
+                    has_magic_initiate_use = True
+            
+            if available_slots <= 0 and not has_magic_initiate_use:
                 cast_btn.setEnabled(False)
                 cast_btn.setToolTip(f"Sem spell slots de nível {spell_level} disponíveis")
+            elif has_magic_initiate_use:
+                # Atualiza tooltip para indicar uso gratuito disponível
+                if available_slots > 0:
+                    cast_btn.setToolTip(f"Gasta 1 spell slot de nível {spell_level}\n✨ Uso gratuito de Magic Initiate disponível (1x)")
+                else:
+                    cast_btn.setToolTip(f"✨ Uso gratuito de Magic Initiate disponível (1x)")
         
         layout.addWidget(cast_btn)
         
@@ -1684,6 +1751,12 @@ class CharacterSheetTab(QWidget):
             self.dice_history.show_and_raise()
             return
         
+        # Verifica se tem uso gratuito de Magic Initiate disponível
+        has_magic_initiate_use = False
+        if spell_name in self.character.spellcasting.magic_initiate_daily_uses:
+            if self.character.spellcasting.magic_initiate_daily_uses[spell_name] > 0:
+                has_magic_initiate_use = True
+        
         # Verifica quais níveis de slot estão disponíveis para upcasting
         available_levels = []
         for level in range(spell_level, 10):
@@ -1692,7 +1765,8 @@ class CharacterSheetTab(QWidget):
                 if slots > 0:
                     available_levels.append(level)
         
-        if not available_levels:
+        # Se não tem slots E não tem uso gratuito, não pode conjurar
+        if not available_levels and not has_magic_initiate_use:
             QMessageBox.warning(
                 self,
                 "Sem Spell Slots",
@@ -1700,6 +1774,36 @@ class CharacterSheetTab(QWidget):
             )
             return
         
+        # Se tem uso gratuito de Magic Initiate, pergunta se quer usar
+        use_free_cast = False
+        if has_magic_initiate_use:
+            if available_levels:
+                # Tem tanto uso gratuito quanto slots - pergunta qual usar
+                reply = QMessageBox.question(
+                    self,
+                    "Magic Initiate",
+                    f"Você tem 1 uso gratuito de <b>{spell_name}</b> (Magic Initiate).\n\n"
+                    f"Deseja usar o slot gratuito ou gastar um spell slot?",
+                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                    QMessageBox.StandardButton.Yes
+                )
+                use_free_cast = (reply == QMessageBox.StandardButton.Yes)
+            else:
+                # Só tem uso gratuito, usa automaticamente
+                use_free_cast = True
+        
+        if use_free_cast:
+            # Usa o slot gratuito de Magic Initiate
+            self.character.spellcasting.magic_initiate_daily_uses[spell_name] -= 1
+            message = f"✨ <b>{spell_name}</b> conjurado! (Magic Initiate - uso gratuito)"
+            self.dice_history.add_entry(message, "SPELL")
+            self.dice_history.show_and_raise()
+            self.update_spell_slots_display()
+            self.update_spells_display()
+            self.character_updated.emit()
+            return
+        
+        # Usa spell slot normal
         # Se tem apenas um nível disponível, usa direto
         if len(available_levels) == 1:
             chosen_level = available_levels[0]
@@ -2707,6 +2811,20 @@ class CharacterSheetTab(QWidget):
                         # Adicionar feat
                         if selected_feat.name not in self.character.feats:
                             self.character.feats.append(selected_feat.name)
+                            
+                            # Aplicar half-feat ability increase
+                            half_feat_ability = dialog.get_half_feat_ability()
+                            if half_feat_ability:
+                                current_value = getattr(self.character.base_stats, half_feat_ability)
+                                new_value = min(current_value + 1, 20)
+                                setattr(self.character.base_stats, half_feat_ability, new_value)
+                                self.character.recalculate_stats()
+                            
+                            # Aplicar Magic Initiate spell choices
+                            magic_initiate_choice = dialog.get_magic_initiate_choice()
+                            if magic_initiate_choice:
+                                self.character.add_magic_initiate_choice(magic_initiate_choice)
+                            
                             self.apply_feat_effects(selected_feat.name)
                             
                             QMessageBox.information(
@@ -2784,6 +2902,35 @@ class CharacterSheetTab(QWidget):
             self.character.max_hit_points += hp_bonus
             self.character.current_hit_points += hp_bonus
         
+        # Magic Initiate: adiciona magias selecionadas
+        elif feat_name == "Magic Initiate":
+            # Busca a última escolha de Magic Initiate
+            if self.character.magic_initiate_choices:
+                choice = self.character.magic_initiate_choices[-1]
+                
+                # Inicializa spellcasting se não existir
+                if not self.character.spellcasting:
+                    from models.spellcasting import SpellcastingInfo
+                    self.character.spellcasting = SpellcastingInfo()
+                    self.character.spellcasting.spellcasting_ability = choice.get('spellcasting_ability', 'intelligence')
+                    # Recalcula DC e bônus
+                    ability_mod = self.character.stats.get_modifier(self.character.spellcasting.spellcasting_ability)
+                    self.character.spellcasting.spell_save_dc = 8 + self.character.proficiency_bonus + ability_mod
+                    self.character.spellcasting.spell_attack_bonus = self.character.proficiency_bonus + ability_mod
+                
+                # Adiciona os 2 cantrips
+                for cantrip in choice.get('cantrips', []):
+                    if cantrip not in self.character.spellcasting.known_cantrips:
+                        self.character.spellcasting.known_cantrips.append(cantrip)
+                
+                # Adiciona a magia de 1º nível
+                level1_spell = choice.get('level1_spell')
+                if level1_spell:
+                    if level1_spell not in self.character.spellcasting.known_spells:
+                        self.character.spellcasting.known_spells.append(level1_spell)
+                    # Inicializa uso diário gratuito
+                    self.character.spellcasting.magic_initiate_daily_uses[level1_spell] = 1
+        
         # Mobile: +10 velocidade (aplicado automaticamente em update_derived_stats)
         # Alert: +5 iniciativa (aplicado automaticamente em update_derived_stats)
         # Great Weapon Master: -5/+10 (aplicado via checkbox)
@@ -2794,8 +2941,51 @@ class CharacterSheetTab(QWidget):
     
     def roll_initiative(self):
         """Rola iniciativa"""
-        total, roll = self.character.roll_initiative()
-        self.dice_history.add_roll("Iniciativa", roll, self.character.initiative, total, "INITIATIVE")
+        modifier = self.character.initiative
+        advantage = self.advantage_active
+        disadvantage = self.disadvantage_active
+        auto_advantage_source = None
+        # Instinto Feral (Bárbaro 7+) concede vantagem em iniciativa
+        if (self.character.character_class and
+                self.character.character_class.name == "Barbarian" and
+                self.character.level >= 7):
+            advantage = True
+            auto_advantage_source = "Instinto Feral"
+
+        if advantage and disadvantage:
+            # Vantagem e desvantagem se anulam
+            advantage = False
+            disadvantage = False
+
+        if advantage:
+            total1, roll1 = DiceRoller.roll_d20(modifier)
+            total2, roll2 = DiceRoller.roll_d20(modifier)
+            if total1 >= total2:
+                total, roll = total1, roll1
+            else:
+                total, roll = total2, roll2
+            roll_desc = f"{roll1} / {roll2}"
+        elif disadvantage:
+            total1, roll1 = DiceRoller.roll_d20(modifier)
+            total2, roll2 = DiceRoller.roll_d20(modifier)
+            if total1 <= total2:
+                total, roll = total1, roll1
+            else:
+                total, roll = total2, roll2
+            roll_desc = f"{roll1} / {roll2}"
+        else:
+            total, roll = DiceRoller.roll_d20(modifier)
+            roll_desc = str(roll)
+
+        label = "Iniciativa"
+        if auto_advantage_source:
+            label += " (" + auto_advantage_source + ")"
+        elif advantage:
+            label += " (Vantagem)"
+        elif disadvantage:
+            label += " (Desvantagem)"
+
+        self.dice_history.add_roll(label, roll_desc, modifier, total, "INITIATIVE")
         self.dice_history.show_and_raise()
     
     def roll_save(self, ability: str):
@@ -2942,6 +3132,20 @@ class CharacterSheetTab(QWidget):
         actual_healing = self.character.current_hit_points - old_hp
         
         self.heal_spin.setValue(0)
+        self.update_display()
+        self.character_updated.emit()
+    
+    def add_temp_hp(self):
+        """Adiciona HP temporário ao personagem"""
+        temp_hp = self.temp_hp_spin.value()
+        if temp_hp <= 0:
+            return
+        
+        # HP temporário não se acumula - usa o maior valor
+        if temp_hp > self.character.temporary_hit_points:
+            self.character.temporary_hit_points = temp_hp
+        
+        self.temp_hp_spin.setValue(0)
         self.update_display()
         self.character_updated.emit()
     
