@@ -31,10 +31,6 @@ class Weapon:
         # Bônus mágico
         bonus += self.magical_bonus
         
-        # Archery Fighting Style (+2 para acertar com armas ranged)
-        if character.has_fighting_style("Archery") and self.weapon_range.lower() == "ranged":
-            bonus += 2
-        
         return bonus
     
     def get_damage_bonus(self, character) -> int:

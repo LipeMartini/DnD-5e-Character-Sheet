@@ -17,7 +17,6 @@ class FightingStyle:
     name: str
     description: str
     classes: List[str]  # Classes que podem escolher este estilo
-    mechanical_effect: str  # Descrição do efeito mecânico
     source: str = "Player's Handbook"
 
     def __str__(self):
@@ -29,43 +28,37 @@ class FightingStyle:
 ARCHERY = FightingStyle(
     name='Archery',
     description='Você ganha +2 de bônus nas jogadas de ataque que fizer com armas de ataque à distância.',
-    classes=['Fighter', 'Ranger'],
-    mechanical_effect='+2 para acertar com armas de alcance'
+    classes=['Fighter', 'Ranger']
 )
 
 DEFENSE = FightingStyle(
     name='Defense',
     description='Enquanto estiver usando armadura, você ganha +1 de bônus na CA.',
-    classes=['Fighter', 'Ranger', 'Paladin'],
-    mechanical_effect='+1 CA quando usar armadura'
+    classes=['Fighter', 'Ranger', 'Paladin']
 )
 
 DUELING = FightingStyle(
     name='Dueling',
     description='Quando você empunhar uma arma de ataque corpo a corpo em uma mão e nenhuma outra arma, você ganha +2 de bônus nas jogadas de dano com essa arma.',
-    classes=['Fighter', 'Ranger', 'Paladin'],
-    mechanical_effect='+2 dano com arma de uma mão (sem outra arma)'
+    classes=['Fighter', 'Ranger', 'Paladin']
 )
 
 GREAT_WEAPON_FIGHTING = FightingStyle(
     name='Great Weapon Fighting',
     description='Quando você rolar 1 ou 2 num dado de dano de um ataque com arma corpo a corpo que você esteja empunhando com duas mãos, você pode rolar o dado novamente e usar a nova rolagem. A arma deve ter a propriedade duas mãos ou versátil para ganhar esse benefício.',
-    classes=['Fighter', 'Paladin'],
-    mechanical_effect='Rerolar 1s e 2s em dano com armas de duas mãos'
+    classes=['Fighter', 'Paladin']
 )
 
 PROTECTION = FightingStyle(
     name='Protection',
     description='Quando uma criatura que você possa ver atacar um alvo que esteja a até 1,5 metro de você, você pode usar sua reação para impor desvantagem na jogada de ataque da criatura. Você deve estar empunhando um escudo.',
-    classes=['Fighter', 'Paladin'],
-    mechanical_effect='Reação: impor desvantagem em ataque (requer escudo)'
+    classes=['Fighter', 'Paladin']
 )
 
 TWO_WEAPON_FIGHTING = FightingStyle(
     name='Two-Weapon Fighting',
     description='Quando você estiver engajado em uma luta com duas armas, você pode adicionar o seu modificador de habilidade de dano na jogada de dano de seu segundo ataque.',
-    classes=['Fighter', 'Ranger'],
-    mechanical_effect='Adiciona mod. de habilidade ao dano do ataque bônus'
+    classes=['Fighter', 'Ranger']
 )
 
 
@@ -107,6 +100,7 @@ def _load_styles_from_file(filename: str) -> Dict[str, FightingStyle]:
     for name, payload in data.items():
         payload = payload.copy()
         payload.setdefault("name", name)
+        payload.pop("mechanical_effect", None)
         loaded[name] = FightingStyle(**payload)
     return loaded
 

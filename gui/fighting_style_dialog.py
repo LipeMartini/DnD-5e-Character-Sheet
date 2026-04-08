@@ -102,7 +102,6 @@ class FightingStyleDialog(QDialog):
             details_html = f"""
             <h3>{style.name}</h3>
             <p><b>Descrição:</b><br>{style.description}</p>
-            <p><b>Efeito Mecânico:</b><br>{style.mechanical_effect}</p>
             """
             
             self.details_text.setHtml(details_html)

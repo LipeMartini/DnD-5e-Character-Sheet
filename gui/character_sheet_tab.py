@@ -1367,7 +1367,7 @@ class CharacterSheetTab(QWidget):
                         padding: 2px;
                     """)
                     info_icon.setCursor(Qt.CursorShape.WhatsThisCursor)
-                    info_icon.setToolTip(f"<b>{style.name}</b><br><br>{style.description}<br><br><i>{style.mechanical_effect}</i>")
+                    info_icon.setToolTip(f"<b>{style.name}</b><br><br>{style.description}")
                     
                     fighting_style_layout.addWidget(info_icon)
                     
@@ -2238,15 +2238,20 @@ class CharacterSheetTab(QWidget):
         weapon_layout.addWidget(name_label)
         
         # Bônus de ataque e dano
-        attack_bonus = weapon.get_attack_bonus(self.character)
+        base_attack_bonus = weapon.get_attack_bonus(self.character)
         damage_bonus = weapon.get_damage_bonus(self.character)
         
-        # Função para atualizar o label de dano dinamicamente
-        def update_damage_label():
+        # Função para atualizar os labels dinamicamente
+        def update_attack_summary():
             # Verifica Dueling
             dueling_active = False
             if hasattr(weapon, 'dueling_checkbox') and weapon.dueling_checkbox.isChecked():
                 dueling_active = True
+            
+            # Verifica Archery
+            archery_active = False
+            if hasattr(weapon, 'archery_checkbox') and weapon.archery_checkbox.isChecked():
+                archery_active = True
             
             # Verifica GWM
             gwm_active = False
@@ -2259,13 +2264,15 @@ class CharacterSheetTab(QWidget):
                 ss_active = True
             
             # Calcula bônus de ataque ajustado
-            adjusted_attack = attack_bonus
+            adjusted_attack = base_attack_bonus
+            if archery_active:
+                adjusted_attack += 2
             if gwm_active or ss_active:
                 adjusted_attack -= 5
             
             # Monta string de dano
             damage_parts = [f"{weapon.damage_dice}{'+' if damage_bonus >= 0 else ''}{damage_bonus}"]
-            
+            attack_bonus_parts = []
             if dueling_active:
                 damage_parts.append("+2 (Dueling)")
             
@@ -2275,8 +2282,10 @@ class CharacterSheetTab(QWidget):
                 damage_parts.append("+10 (SS)")
             
             damage_str = " ".join(damage_parts)
-            
-            info_label.setText(f"Atq {'+' if adjusted_attack >= 0 else ''}{adjusted_attack}  |  Dano {damage_str}")
+            attack_suffix = f" {' '.join(attack_bonus_parts)}" if attack_bonus_parts else ""
+            info_label.setText(
+                f"Atq {'+' if adjusted_attack >= 0 else ''}{adjusted_attack}{attack_suffix}  |  Dano {damage_str}"
+            )
         
         info_label = QLabel()
         info_label.setFont(QFont("Georgia", 9))
@@ -2303,7 +2312,7 @@ class CharacterSheetTab(QWidget):
             dueling_checkbox.setChecked(True)  # Marcado por padrão
             
             # Conecta o checkbox para atualizar o label quando mudado
-            dueling_checkbox.stateChanged.connect(update_damage_label)
+            dueling_checkbox.stateChanged.connect(update_attack_summary)
             
             weapon_layout.addWidget(dueling_checkbox)
             
@@ -2332,7 +2341,7 @@ class CharacterSheetTab(QWidget):
             gwm_checkbox.setChecked(False)  # Desmarcado por padrão
             
             # Conecta o checkbox para atualizar o label quando mudado
-            gwm_checkbox.stateChanged.connect(update_damage_label)
+            gwm_checkbox.stateChanged.connect(update_attack_summary)
             
             weapon_layout.addWidget(gwm_checkbox)
             
@@ -2360,15 +2369,40 @@ class CharacterSheetTab(QWidget):
             ss_checkbox.setChecked(False)  # Desmarcado por padrão
             
             # Conecta o checkbox para atualizar o label quando mudado
-            ss_checkbox.stateChanged.connect(update_damage_label)
+            ss_checkbox.stateChanged.connect(update_attack_summary)
             
             weapon_layout.addWidget(ss_checkbox)
             
             # Armazena referência ao checkbox no objeto weapon
             weapon.sharpshooter_checkbox = ss_checkbox
         
+        # Checkbox para Archery Fighting Style (se aplicável)
+        archery_checkbox = None
+        if (self.character.has_fighting_style("Archery") and 
+            weapon.weapon_range.lower() == "ranged"):
+            from PyQt6.QtWidgets import QCheckBox
+            archery_checkbox = QCheckBox("🏹 Usar Archery (+2 ataque)")
+            archery_checkbox.setFont(QFont("Georgia", 8))
+            archery_checkbox.setStyleSheet("""
+                QCheckBox {
+                    background-color: transparent;
+                    color: #8B4513;
+                    font-weight: bold;
+                }
+                QCheckBox::indicator {
+                    width: 15px;
+                    height: 15px;
+                }
+            """)
+            archery_checkbox.setChecked(True)
+
+            archery_checkbox.stateChanged.connect(update_attack_summary)
+
+            weapon_layout.addWidget(archery_checkbox)
+            weapon.archery_checkbox = archery_checkbox
+        
         # Atualiza o label inicial
-        update_damage_label()
+        update_attack_summary()
         
         # Botões de rolagem
         buttons_layout = QHBoxLayout()
@@ -2416,6 +2450,8 @@ class CharacterSheetTab(QWidget):
         from models import DiceRoller
         
         attack_bonus = weapon.get_attack_bonus(self.character)
+        if hasattr(weapon, 'archery_checkbox') and weapon.archery_checkbox.isChecked():
+            attack_bonus += 2
         
         # Aplica penalidade de GWM ou Sharpshooter se ativo
         gwm_ss_penalty = 0
