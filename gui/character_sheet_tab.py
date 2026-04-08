@@ -9,6 +9,8 @@ from .dice_history_window import DiceHistoryWindow
 from .inventory_window import InventoryWindow
 from .advanced_edit_window import AdvancedEditWindow
 from .fighting_style_dialog import FightingStyleDialog
+from .eldritch_invocation_dialog import EldritchInvocationDialog
+from .pact_boon_dialog import PactBoonDialog
 from .feat_dialog import FeatDialog
 from .expertise_selection_dialog import ExpertiseSelectionDialog
 from .optional_content_dialog import OptionalContentDialog
@@ -348,12 +350,20 @@ class CharacterSheetTab(QWidget):
         dialog.exec()
 
     def on_optional_content_changed(self):
-        """Atualiza seções dependentes de magias após mudar conteúdo opcional."""
+        """Atualiza caches dependentes ao alterar conteúdo opcional."""
         from models import SpellDatabase
+        from models.fighting_styles import reload_fighting_styles_cache
+        from models.eldritch_invocations import EldritchInvocationDatabase
+        from models.pact_boons import PactBoonDatabase
 
         SpellDatabase.reload_cache()
+        reload_fighting_styles_cache()
+        EldritchInvocationDatabase.reload_cache()
+        PactBoonDatabase.reload_cache()
+
         self.update_spell_slots_display()
         self.update_spells_display()
+        self.update_class_features_display()
     
     def create_stats_section(self):
         """Cria seção de atributos com visual de escudo"""
@@ -1373,6 +1383,117 @@ class CharacterSheetTab(QWidget):
             separator.setFrameShape(QFrame.Shape.HLine)
             separator.setStyleSheet("background-color: #D2B48C; max-height: 1px;")
             self.features_container_layout.addWidget(separator)
+
+        # Adiciona Pact Boon (Warlock)
+        if self.character.pact_boon:
+            from models.pact_boons import PactBoonDatabase
+
+            boon = PactBoonDatabase.get_boon(self.character.pact_boon)
+            boon_layout = QHBoxLayout()
+            boon_layout.setContentsMargins(0, 0, 0, 0)
+            boon_layout.setSpacing(5)
+
+            boon_label = QLabel(f"🔗 Pact Boon: {self.character.pact_boon}")
+            boon_label.setFont(QFont("Georgia", 10, QFont.Weight.Bold))
+            boon_label.setStyleSheet("background-color: transparent; color: #1B5E20;")
+            boon_layout.addWidget(boon_label)
+
+            boon_layout.addStretch()
+
+            info_icon = QLabel("ℹ️")
+            info_icon.setFont(QFont("Georgia", 10))
+            info_icon.setStyleSheet("background-color: transparent; color: #4A90E2; padding: 2px;")
+            info_icon.setCursor(Qt.CursorShape.WhatsThisCursor)
+
+            if boon:
+                tooltip = (
+                    f"<b>{boon.name}</b><br><br>{boon.description}<br><br>"
+                    f"<i>{boon.mechanical_effect}</i>"
+                )
+            else:
+                tooltip = f"<b>{self.character.pact_boon}</b><br><br>Descrição não disponível."
+
+            info_icon.setToolTip(tooltip)
+            boon_layout.addWidget(info_icon)
+
+            boon_widget = QWidget()
+            boon_widget.setLayout(boon_layout)
+            boon_widget.setStyleSheet("background-color: transparent;")
+            self.features_container_layout.addWidget(boon_widget)
+
+            separator = QFrame()
+            separator.setFrameShape(QFrame.Shape.HLine)
+            separator.setStyleSheet("background-color: #D2B48C; max-height: 1px;")
+            self.features_container_layout.addWidget(separator)
+
+        # Adiciona Eldritch Invocations
+        if self.character.eldritch_invocations:
+            from models.eldritch_invocations import EldritchInvocationDatabase
+
+            for invocation_name in self.character.eldritch_invocations:
+                invocation = EldritchInvocationDatabase.get_invocation(invocation_name)
+                invocation_layout = QHBoxLayout()
+                invocation_layout.setContentsMargins(0, 0, 0, 0)
+                invocation_layout.setSpacing(5)
+
+                invocation_label = QLabel(f"🔮 Invocation: {invocation_name}")
+                invocation_label.setFont(QFont("Georgia", 10, QFont.Weight.Bold))
+                invocation_label.setStyleSheet("background-color: transparent; color: #4A148C;")
+                invocation_layout.addWidget(invocation_label)
+
+                invocation_layout.addStretch()
+
+                info_icon = QLabel("ℹ️")
+                info_icon.setFont(QFont("Georgia", 10))
+                info_icon.setStyleSheet("background-color: transparent; color: #4A90E2; padding: 2px;")
+                info_icon.setCursor(Qt.CursorShape.WhatsThisCursor)
+
+                if invocation:
+                    tooltip = (
+                        f"<b>{invocation.name}</b><br><br>{invocation.description}<br><br>"
+                        f"<i>Nível mínimo: {invocation.min_level}</i>"
+                    )
+                else:
+                    tooltip = f"<b>{invocation_name}</b><br><br>Descrição não disponível."
+
+                info_icon.setToolTip(tooltip)
+                invocation_layout.addWidget(info_icon)
+
+                invocation_widget = QWidget()
+                invocation_widget.setLayout(invocation_layout)
+                invocation_widget.setStyleSheet("background-color: transparent;")
+
+                self.features_container_layout.addWidget(invocation_widget)
+
+            separator = QFrame()
+            separator.setFrameShape(QFrame.Shape.HLine)
+            separator.setStyleSheet("background-color: #D2B48C; max-height: 1px;")
+            self.features_container_layout.addWidget(separator)
+
+    def check_and_select_pact_boon(self, level: int):
+        """Warlocks escolhem um Pact Boon no nível 3."""
+        if not self.character.character_class:
+            return
+
+        if self.character.character_class.name != "Warlock":
+            return
+
+        if level < 3 or self.character.pact_boon:
+            return
+
+        dialog = PactBoonDialog(self)
+        if dialog.exec():
+            selected_boon = dialog.get_selected_boon()
+            if selected_boon:
+                self.character.pact_boon = selected_boon
+                self.update_display()
+                self.character_updated.emit()
+                QMessageBox.information(
+                    self,
+                    "Pact Boon escolhido",
+                    f"Seu patrono concedeu a dádiva: <b>{selected_boon}</b>.\n\n"
+                    "Esta escolha desbloqueia novas invocações e habilidades."
+                )
         
         # Adiciona Subclasse se existir
         if self.character.subclass_name:
@@ -1554,7 +1675,6 @@ class CharacterSheetTab(QWidget):
                         self.character.character_class.name,
                         subclass_name
                     )
-                    
                     if subclass:
                         # Busca a feature específica
                         for feature in subclass.features:
@@ -1579,6 +1699,37 @@ class CharacterSheetTab(QWidget):
             feature_widget.setStyleSheet("background-color: transparent;")
             
             self.features_container_layout.addWidget(feature_widget)
+    
+    def check_and_select_eldritch_invocations(self, level: int):
+        """Garante que Warlocks escolham novas Eldritch Invocations no nível correto."""
+        if not self.character.character_class or self.character.character_class.name != "Warlock":
+            return
+
+        from models.eldritch_invocations import EldritchInvocationDatabase
+
+        total_allowed = EldritchInvocationDatabase.get_known_count_for_level(level)
+        current_known = len(self.character.eldritch_invocations)
+        additional_needed = max(total_allowed - current_known, 0)
+
+        if additional_needed <= 0:
+            return
+
+        dialog = EldritchInvocationDialog(self.character, additional_needed, self)
+        if dialog.exec():
+            selected = dialog.get_selected_invocations()
+            for invocation_name in selected:
+                if invocation_name not in self.character.eldritch_invocations:
+                    self.character.eldritch_invocations.append(invocation_name)
+
+            if selected:
+                self.update_display()
+                self.character_updated.emit()
+                QMessageBox.information(
+                    self,
+                    "Invocações aprendidas",
+                    "<b>Novo conhecimento obscuro desbloqueado!</b><br>"
+                    "Suas escolhas foram adicionadas à ficha."
+                )
     
     def update_spell_slots_display(self):
         """Atualiza a exibição de spell slots"""
@@ -2507,11 +2658,17 @@ class CharacterSheetTab(QWidget):
         
         # 3. Additional Fighting Style (Champion nível 10)
         self.check_champion_additional_fighting_style(new_level)
+
+        # 4. Pact Boon (Warlock)
+        self.check_and_select_pact_boon(new_level)
+
+        # 5. Eldritch Invocations (Warlock)
+        self.check_and_select_eldritch_invocations(new_level)
         
-        # 4. Subclasse
+        # 6. Subclasse
         self.check_and_select_subclass(new_level)
         
-        # 5. Feat/ASI
+        # 7. Feat/ASI
         self.check_and_select_feat(new_level)
 
     def check_and_select_expertise(self, level: int):

@@ -15,6 +15,8 @@ from .spell import Spell, SpellDatabase
 from .spellcasting import SpellcastingInfo, SpellSlotTable
 from .subclass import Subclass, SubclassFeature, SubclassDatabase
 from .app_settings import AppSettings
+from .eldritch_invocations import EldritchInvocation, EldritchInvocationDatabase
+from .pact_boons import PactBoon, PactBoonDatabase
 
 __all__ = ['Character', 'Stats', 'Race', 'RaceDatabase', 'Subrace', 'SubraceDatabase', 
            'CharacterClass', 'ClassDatabase', 'Background', 'BackgroundDatabase', 'DiceRoller',
@@ -22,4 +24,5 @@ __all__ = ['Character', 'Stats', 'Race', 'RaceDatabase', 'Subrace', 'SubraceData
            'get_trait_description', 'TRAIT_DESCRIPTIONS',
            'ClassFeature', 'CLASS_FEATURES', 'get_class_features', 'get_all_features_up_to_level',
            'Spell', 'SpellDatabase', 'SpellcastingInfo', 'SpellSlotTable',
-           'Subclass', 'SubclassFeature', 'SubclassDatabase', 'AppSettings']
+           'Subclass', 'SubclassFeature', 'SubclassDatabase', 'AppSettings',
+           'EldritchInvocation', 'EldritchInvocationDatabase', 'PactBoon', 'PactBoonDatabase']

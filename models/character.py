@@ -54,6 +54,12 @@ class Character:
     
     # Fighting Styles (pode ter múltiplos via feats ou multiclasse)
     fighting_styles: List[str] = field(default_factory=list)
+
+    # Eldritch Invocations conhecidas (Warlock)
+    eldritch_invocations: List[str] = field(default_factory=list)
+
+    # Pact Boon (Warlock nível 3)
+    pact_boon: Optional[str] = None
     
     # Feats (Talentos)
     feats: List[str] = field(default_factory=list)
@@ -629,7 +635,12 @@ class Character:
             True se o personagem tem o estilo, False caso contrário
         """
         return style_name in self.fighting_styles
-    
+
+    def has_pact_boon(self, boon_name: str) -> bool:
+        """Retorna True se o Warlock já escolheu o Pact Boon informado."""
+
+        return self.pact_boon == boon_name
+
     def has_feat(self, feat_name: str) -> bool:
         """
         Verifica se o personagem tem um Feat específico
@@ -674,6 +685,8 @@ class Character:
             'inventory': self.inventory.to_dict(),
             'spellcasting': self.spellcasting.to_dict() if self.spellcasting else None,
             'fighting_styles': self.fighting_styles,
+            'eldritch_invocations': self.eldritch_invocations,
+            'pact_boon': self.pact_boon,
             'feats': self.feats,
             'subclass_name': self.subclass_name,
             'notes': self.notes,
@@ -733,6 +746,8 @@ class Character:
             char.update_spellcasting_stats()
         
         char.fighting_styles = data.get('fighting_styles', [])
+        char.eldritch_invocations = data.get('eldritch_invocations', [])
+        char.pact_boon = data.get('pact_boon')
         char.feats = data.get('feats', [])
         char.subclass_name = data.get('subclass_name')
         char.notes = data.get('notes', {})

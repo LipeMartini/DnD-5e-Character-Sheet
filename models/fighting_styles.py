@@ -1,19 +1,25 @@
-"""
-Sistema de Fighting Styles para D&D 5e
-"""
+"""Sistema de Fighting Styles para D&D 5e."""
 
+from __future__ import annotations
+
+import json
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Dict, List, Optional
+
+from .app_settings import AppSettings
 
 
 @dataclass
 class FightingStyle:
-    """Representa um estilo de luta"""
+    """Representa um estilo de luta."""
+
     name: str
     description: str
     classes: List[str]  # Classes que podem escolher este estilo
     mechanical_effect: str  # Descrição do efeito mecânico
-    
+    source: str = "Player's Handbook"
+
     def __str__(self):
         return self.name
 
@@ -63,8 +69,8 @@ TWO_WEAPON_FIGHTING = FightingStyle(
 )
 
 
-# Dicionário de todos os estilos de luta
-ALL_FIGHTING_STYLES: Dict[str, FightingStyle] = {
+# Estilos básicos do PHB
+BASE_FIGHTING_STYLES: Dict[str, FightingStyle] = {
     'Archery': ARCHERY,
     'Defense': DEFENSE,
     'Dueling': DUELING,
@@ -72,6 +78,71 @@ ALL_FIGHTING_STYLES: Dict[str, FightingStyle] = {
     'Protection': PROTECTION,
     'Two-Weapon Fighting': TWO_WEAPON_FIGHTING,
 }
+
+OPTIONAL_STYLE_FILES = {
+    "tashas_spells": ("fighting_styles_tcoe.json", "Tasha's Cauldron of Everything"),
+    "xanathars_spells": ("fighting_styles_xgte.json", "Xanathar's Guide to Everything"),
+}
+
+_STYLE_CACHE: Optional[Dict[str, FightingStyle]] = None
+
+
+def _data_dir() -> Path:
+    return Path(__file__).parent.parent / "data"
+
+
+def _load_styles_from_file(filename: str) -> Dict[str, FightingStyle]:
+    file_path = _data_dir() / filename
+    if not file_path.exists():
+        return {}
+
+    try:
+        with open(file_path, "r", encoding="utf-8") as handle:
+            data = json.load(handle)
+    except (OSError, json.JSONDecodeError) as exc:
+        print(f"⚠️ Não foi possível carregar estilos opcionais de {filename}: {exc}")
+        return {}
+
+    loaded: Dict[str, FightingStyle] = {}
+    for name, payload in data.items():
+        payload = payload.copy()
+        payload.setdefault("name", name)
+        loaded[name] = FightingStyle(**payload)
+    return loaded
+
+
+def _load_optional_styles() -> Dict[str, FightingStyle]:
+    optional_styles: Dict[str, FightingStyle] = {}
+    optional_content = AppSettings.load().get("optional_content", {})
+
+    for flag, (filename, source_label) in OPTIONAL_STYLE_FILES.items():
+        if not optional_content.get(flag, False):
+            continue
+
+        styles = _load_styles_from_file(filename)
+        if not styles:
+            print(
+                f"⚠️ Conteúdo opcional '{source_label}' habilitado, mas {filename} não foi encontrado ou está vazio."
+            )
+        optional_styles.update(styles)
+
+    return optional_styles
+
+
+def _get_all_fighting_styles() -> Dict[str, FightingStyle]:
+    global _STYLE_CACHE
+    if _STYLE_CACHE is None:
+        styles = dict(BASE_FIGHTING_STYLES)
+        styles.update(_load_optional_styles())
+        _STYLE_CACHE = styles
+    return _STYLE_CACHE
+
+
+def reload_fighting_styles_cache() -> None:
+    """Força recarregamento dos estilos (utilizado ao alterar conteúdo opcional)."""
+
+    global _STYLE_CACHE
+    _STYLE_CACHE = None
 
 
 def get_available_fighting_styles(class_name: str) -> List[FightingStyle]:
@@ -85,7 +156,7 @@ def get_available_fighting_styles(class_name: str) -> List[FightingStyle]:
         Lista de FightingStyle disponíveis para a classe
     """
     available = []
-    for style in ALL_FIGHTING_STYLES.values():
+    for style in _get_all_fighting_styles().values():
         if class_name in style.classes:
             available.append(style)
     return available
@@ -101,4 +172,4 @@ def get_fighting_style(style_name: str) -> Optional[FightingStyle]:
     Returns:
         FightingStyle ou None se não encontrado
     """
-    return ALL_FIGHTING_STYLES.get(style_name)
+    return _get_all_fighting_styles().get(style_name)

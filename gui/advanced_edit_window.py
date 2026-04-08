@@ -1,8 +1,12 @@
 from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QTabWidget, 
                              QWidget, QLabel, QPushButton, QSpinBox, QGroupBox,
-                             QFormLayout, QCheckBox, QScrollArea, QMessageBox)
+                             QFormLayout, QCheckBox, QScrollArea, QMessageBox,
+                             QComboBox, QListWidget, QListWidgetItem)
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QFont
+
+from models.pact_boons import PactBoonDatabase
+from models.eldritch_invocations import EldritchInvocationDatabase
 
 class AdvancedEditWindow(QDialog):
     """Janela de edição avançada para customização manual do personagem"""
@@ -14,6 +18,8 @@ class AdvancedEditWindow(QDialog):
         self.character = character
         self.setWindowTitle("Edição Avançada")
         self.setMinimumSize(700, 600)
+        self.pact_boon_combo: QComboBox | None = None
+        self.invocation_list_widget: QListWidget | None = None
         self.init_ui()
         self.apply_theme()
         self.load_values()
@@ -127,6 +133,10 @@ class AdvancedEditWindow(QDialog):
         # Aba de Perícias
         skills_tab = self.create_skills_tab()
         self.tabs.addTab(skills_tab, "🎯 Perícias")
+
+        # Aba de Warlock (Pact Boon + Invocations)
+        warlock_tab = self.create_warlock_tab()
+        self.tabs.addTab(warlock_tab, "🔮 Warlock")
         
         layout.addWidget(self.tabs)
         
@@ -338,6 +348,94 @@ class AdvancedEditWindow(QDialog):
         
         return tab
 
+    def create_warlock_tab(self):
+        """Cria aba dedicada a opções específicas de Warlock."""
+        tab = QWidget()
+        layout = QVBoxLayout(tab)
+
+        if not self.character.character_class or self.character.character_class.name != "Warlock":
+            info_label = QLabel(
+                "Esta aba é liberada apenas para personagens Warlock."
+            )
+            info_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            info_label.setWordWrap(True)
+            info_label.setStyleSheet(
+                "color: #777; font-style: italic; background-color: #FFF8DC; "
+                "border: 1px dashed #BCAAA4; padding: 15px;"
+            )
+            layout.addStretch()
+            layout.addWidget(info_label)
+            layout.addStretch()
+            return tab
+
+        # Pact Boon
+        boon_group = QGroupBox("Pact Boon")
+        boon_layout = QFormLayout()
+        self.pact_boon_combo = QComboBox()
+        self.pact_boon_combo.addItem("— Nenhum —", None)
+        for boon in PactBoonDatabase.get_all_boons():
+            self.pact_boon_combo.addItem(boon.name, boon.name)
+        boon_layout.addRow("Selecione:", self.pact_boon_combo)
+
+        boon_hint = QLabel(
+            "💡 Você pode redefinir seu Pact Boon aqui se estiver usando regras de "
+            "reescolha entre aventuras."
+        )
+        boon_hint.setWordWrap(True)
+        boon_hint.setStyleSheet("color: #555;")
+        boon_layout.addRow(boon_hint)
+        boon_group.setLayout(boon_layout)
+        layout.addWidget(boon_group)
+
+        # Invocations
+        invocation_group = QGroupBox("Eldritch Invocations")
+        invocation_vbox = QVBoxLayout()
+
+        instructions = QLabel(
+            "Marque as invocações que seu personagem conhece. Esta seção é útil para "
+            "refazer escolhas ao subir de nível."
+        )
+        instructions.setWordWrap(True)
+        invocation_vbox.addWidget(instructions)
+
+        self.invocation_list_widget = QListWidget()
+        self.invocation_list_widget.setStyleSheet("background-color: #FFFAF0;")
+        self.invocation_list_widget.setSelectionMode(QListWidget.SelectionMode.NoSelection)
+
+        invocations = list(EldritchInvocationDatabase.get_all_invocations().values())
+        invocations.sort(key=lambda inv: (inv.min_level, inv.name))
+
+        for invocation in invocations:
+            subtitle = f"Nível {invocation.min_level}+"
+            if invocation.required_pacts:
+                subtitle += f" • Requer: {', '.join(invocation.required_pacts)}"
+            item = QListWidgetItem(f"{invocation.name} ({subtitle})")
+            item.setData(Qt.ItemDataRole.UserRole, invocation.name)
+            item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
+            item.setCheckState(Qt.CheckState.Unchecked)
+            tooltip = (
+                f"<b>{invocation.name}</b><br><br>{invocation.description}<br><br>"
+                f"<i>Fonte: {invocation.source}</i>"
+            )
+            item.setToolTip(tooltip)
+            self.invocation_list_widget.addItem(item)
+
+        invocation_vbox.addWidget(self.invocation_list_widget)
+
+        reminder = QLabel(
+            "⚠️ Respeite os requisitos oficiais (nível, patrono, Pact Boon) ao marcar "
+            "novas invocações."
+        )
+        reminder.setWordWrap(True)
+        reminder.setStyleSheet("color: #B71C1C; font-style: italic;")
+        invocation_vbox.addWidget(reminder)
+
+        invocation_group.setLayout(invocation_vbox)
+        layout.addWidget(invocation_group)
+
+        layout.addStretch()
+        return tab
+
     def on_prof_toggled(self, skill: str, checked: bool):
         """Garante exclusividade: proficiência simples x expertise"""
         expert_cb = self.skill_expert_checkboxes.get(skill)
@@ -380,6 +478,20 @@ class AdvancedEditWindow(QDialog):
             cb.setChecked(is_prof)
         for skill, cb in self.skill_expert_checkboxes.items():
             cb.setChecked(skill in getattr(self.character, 'skill_expertise', []))
+
+        # Pact Boon e Invocações
+        if self.pact_boon_combo:
+            index = self.pact_boon_combo.findData(self.character.pact_boon)
+            self.pact_boon_combo.setCurrentIndex(index if index >= 0 else 0)
+
+        if self.invocation_list_widget:
+            known = set(self.character.eldritch_invocations)
+            for row in range(self.invocation_list_widget.count()):
+                item = self.invocation_list_widget.item(row)
+                name = item.data(Qt.ItemDataRole.UserRole)
+                item.setCheckState(
+                    Qt.CheckState.Checked if name in known else Qt.CheckState.Unchecked
+                )
     
     def save_changes(self):
         """Salva as alterações no personagem"""
@@ -415,6 +527,20 @@ class AdvancedEditWindow(QDialog):
             skill for skill, cb in self.skill_expert_checkboxes.items()
             if cb.isChecked()
         ]
+
+        # Pact Boon e Invocações
+        if self.pact_boon_combo:
+            self.character.pact_boon = self.pact_boon_combo.currentData()
+
+        if self.invocation_list_widget:
+            self.character.eldritch_invocations = []
+            for row in range(self.invocation_list_widget.count()):
+                item = self.invocation_list_widget.item(row)
+                if item.checkState() == Qt.CheckState.Checked:
+                    name = item.data(Qt.ItemDataRole.UserRole)
+                    if name:
+                        self.character.eldritch_invocations.append(name)
+
         
         # Recalcula estatísticas derivadas (CA, iniciativa, velocidade, etc.)
         self.character.update_derived_stats()
