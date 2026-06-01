@@ -6,27 +6,44 @@ echo "  D&D Companion - Build Script (Linux)"
 echo "========================================"
 echo
 
-# Garante Python 3.10+ (PyQt6 6.7+ requer Python >= 3.9)
+# Garante Python 3.10+ usando uv (gerenciador confiável da Astral)
 echo "Verificando versão do Python..."
-if ! python3.10 --version &>/dev/null; then
-    echo "Instalando Python 3.10 via deadsnakes PPA..."
-    sudo apt-get install -y software-properties-common
-    sudo add-apt-repository -y ppa:deadsnakes/ppa
-    sudo apt-get update -qq
-    sudo apt-get install -y python3.10
-    sudo apt-get install -y python3.10-distutils 2>/dev/null || true
-    # Baixa get-pip.py para arquivo (evita erro de pipe)
-    curl -sS https://bootstrap.pypa.io/get-pip.py -o /tmp/get-pip.py
-    python3.10 /tmp/get-pip.py --user
+export PATH="$HOME/.local/bin:$HOME/.cargo/bin:$PATH"
+
+if ! command -v uv &>/dev/null; then
+    echo "Instalando uv..."
+    curl -LsSf https://astral.sh/uv/install.sh | sh
+    export PATH="$HOME/.local/bin:$HOME/.cargo/bin:$PATH"
 fi
 
-if ! python3.10 --version &>/dev/null; then
-    echo "ERRO: Python 3.10 nao foi instalado. Instale manualmente e rode novamente."
+if ! command -v uv &>/dev/null; then
+    echo "ERRO: Falha ao instalar uv. Verifique sua conexão e tente novamente."
     exit 1
 fi
 
-PYTHON=python3.10
-PIP="$PYTHON -m pip"
+echo "Instalando Python 3.10 via uv..."
+uv python install 3.10
+
+PYTHON=$(uv python find 3.10 2>/dev/null)
+if [ -z "$PYTHON" ]; then
+    echo "ERRO: Python 3.10 nao encontrado apos instalacao."
+    exit 1
+fi
+
+echo "Python: $($PYTHON --version)"
+
+# Cria ambiente virtual isolado para o build (em $HOME para evitar limite de memória do tmpfs)
+BUILD_VENV="$HOME/.dnd-build-venv"
+if [ ! -f "$BUILD_VENV/bin/python" ]; then
+    echo "Criando ambiente virtual..."
+    uv venv "$BUILD_VENV" --python 3.10
+    # Bootstrap pip no venv (uv venv não inclui pip por padrão no WSL1)
+    "$BUILD_VENV/bin/python" -m ensurepip --upgrade
+fi
+source "$BUILD_VENV/bin/activate"
+PYTHON="$BUILD_VENV/bin/python"
+# uv pip causa 'Cannot allocate memory' no WSL1 por usar mmap; usa pip normal
+PIP="$PYTHON -m pip --no-cache-dir"
 
 # Adiciona ~/.local/bin ao PATH (onde pip instala scripts de usuário)
 export PATH="$HOME/.local/bin:$PATH"
@@ -55,12 +72,16 @@ fi
 $PYTHON -c "import PyInstaller" 2>/dev/null
 if [ $? -ne 0 ]; then
     echo "PyInstaller nao encontrado. Instalando..."
-    $PIP install --user pyinstaller
+    $PIP install pyinstaller
 fi
 
-# Instala dependências do projeto
+# Instala PyQt6 com wheel pré-compilada (PyQt6 6.11+ não tem manylinux wheel)
+echo "Instalando PyQt6..."
+$PIP install 'PyQt6==6.7.1' --only-binary PyQt6,PyQt6-Qt6,PyQt6-sip
+
+# Instala demais dependências do projeto
 echo "Instalando dependências Python..."
-$PIP install --user -r requirements.txt
+$PIP install reportlab supabase
 
 echo
 echo "Criando executavel..."
@@ -85,15 +106,14 @@ $PYTHON -m PyInstaller --name="DnD Companion" --onefile --windowed --add-data="d
   --hidden-import=sniffio \
   --hidden-import=supabase \
   --hidden-import=supabase_auth \
-  --hidden-import=supabase_auth._async.client \
-  --hidden-import=supabase_auth._sync.client \
   --hidden-import=postgrest \
   --hidden-import=realtime \
   --hidden-import=storage3 \
   --hidden-import=websockets \
   --hidden-import=websockets.legacy.client \
   --hidden-import=pydantic \
-  --hidden-import=pyjwt \
+  --hidden-import=jwt \
+  --hidden-import=jwt.algorithms \
   --hidden-import=strenum \
   --hidden-import=yarl \
   main.py
@@ -114,3 +134,79 @@ echo
 # Torna o executável executável
 chmod +x "dist/DnD Companion"
 echo "Permissao de execucao aplicada."
+
+echo
+echo "========================================"
+echo "  Gerando AppImage..."
+echo "========================================"
+echo
+
+APPDIR="$(pwd)/AppDir"
+APPIMAGE_OUT="DnD_Companion-x86_64.AppImage"
+
+# Limpa e recria o AppDir
+rm -rf "$APPDIR"
+mkdir -p "$APPDIR/usr/bin"
+
+# Copia o executável
+cp "dist/DnD Companion" "$APPDIR/usr/bin/dnd-companion"
+
+# Cria o arquivo .desktop (obrigatório para AppImage)
+cat > "$APPDIR/dnd-companion.desktop" << 'EOF'
+[Desktop Entry]
+Name=DnD Companion
+Exec=dnd-companion
+Icon=dnd-companion
+Type=Application
+Categories=Game;
+Comment=D&D 5e Character Sheet and Session Manager
+EOF
+
+# Cria ícone placeholder (PNG 256x256 simples via Python)
+"$PYTHON" - << 'PYEOF'
+try:
+    from PIL import Image, ImageDraw, ImageFont
+    img = Image.new("RGBA", (256, 256), (139, 69, 19, 255))
+    draw = ImageDraw.Draw(img)
+    draw.ellipse([20, 20, 236, 236], fill=(180, 50, 50, 255))
+    draw.text((128, 128), "D&D", fill=(255, 255, 255, 255), anchor="mm")
+    img.save("AppDir/dnd-companion.png")
+except Exception:
+    # Sem Pillow disponível: cria ícone mínimo vazio (1x1)
+    import struct, zlib
+    def png1x1(r,g,b):
+        def chunk(t,d): c=zlib.crc32(t+d)&0xffffffff; return struct.pack('>I',len(d))+t+d+struct.pack('>I',c)
+        sig=b'\x89PNG\r\n\x1a\n'
+        ihdr=chunk(b'IHDR',struct.pack('>IIBBBBB',1,1,8,2,0,0,0))
+        raw=b'\x00'+bytes([r,g,b])
+        idat=chunk(b'IDAT',zlib.compress(raw))
+        iend=chunk(b'IEND',b'')
+        return sig+ihdr+idat+iend
+    open("AppDir/dnd-companion.png","wb").write(png1x1(139,69,19))
+PYEOF
+
+# Link simbólico obrigatório para appimagetool
+ln -sf "usr/bin/dnd-companion" "$APPDIR/AppRun"
+chmod +x "$APPDIR/AppRun"
+
+# Baixa appimagetool se não estiver disponível
+APPIMAGETOOL="$HOME/.local/bin/appimagetool"
+if [ ! -f "$APPIMAGETOOL" ]; then
+    echo "Baixando appimagetool..."
+    mkdir -p "$HOME/.local/bin"
+    wget -q "https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage" \
+        -O "$APPIMAGETOOL"
+    chmod +x "$APPIMAGETOOL"
+fi
+
+# Gera o AppImage (APPIMAGE_EXTRACT_AND_RUN=1 contorna a falta de FUSE no WSL1)
+APPIMAGE_EXTRACT_AND_RUN=1 ARCH=x86_64 "$APPIMAGETOOL" "$APPDIR" "$APPIMAGE_OUT" 2>&1
+
+if [ -f "$APPIMAGE_OUT" ]; then
+    echo
+    echo "========================================"
+    echo "  AppImage gerado: $APPIMAGE_OUT"
+    echo "========================================"
+else
+    echo "AVISO: AppImage nao foi gerado. O executavel ainda esta em dist/DnD Companion"
+fi

@@ -41,3 +41,7 @@ Thumbs.db
 
 # installer
 installer_output/
+
+# Linux build artifacts
+AppDir/
+*.AppImage
