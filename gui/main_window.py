@@ -13,11 +13,16 @@ from models.character_exporter import CharacterExporter
 from models.character_pdf_exporter import CharacterPDFExporter
 from .character_creation_dialog import CharacterCreationDialog
 from .character_sheet_tab import CharacterSheetTab
+from .session_dialog import SessionDialog, SessionCodeDialog
+from .session_panel import SessionPanel
+from services.session_service import SessionService
 
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.character = Character()
+        self._session_service = SessionService(self)
+        self._session_panel = None
         self.init_ui()
     
     def init_ui(self):
@@ -43,6 +48,10 @@ class MainWindow(QMainWindow):
         self.load_btn.clicked.connect(self.load_json)
         button_layout.addWidget(self.load_btn)
         
+        self.session_btn = QPushButton("⚔️ Sessão")
+        self.session_btn.clicked.connect(self.open_session)
+        button_layout.addWidget(self.session_btn)
+
         button_layout.addStretch()
         
         main_layout.addLayout(button_layout)
@@ -56,6 +65,45 @@ class MainWindow(QMainWindow):
         if not self.character.name:
             self.show_welcome_dialog()
     
+    def open_session(self):
+        """Abre o diálogo para criar ou entrar em uma sessão."""
+        if self._session_service.is_active:
+            if self._session_panel:
+                self._session_panel.show()
+                self._session_panel.raise_()
+            return
+
+        char_name = self.character.name or ""
+        dialog = SessionDialog(character_name=char_name, parent=self)
+        if not dialog.exec():
+            return
+
+        try:
+            if dialog.mode == "create":
+                code = self._session_service.create_session(
+                    dm_name=dialog.player_name,
+                    character_name=dialog.character_name,
+                )
+                SessionCodeDialog(code, self).exec()
+            else:
+                self._session_service.join_session(
+                    code=dialog.join_code,
+                    player_name=dialog.player_name,
+                    character_name=dialog.character_name,
+                )
+        except Exception as e:
+            QMessageBox.critical(self, "Erro na Sessão", str(e))
+            return
+
+        self._session_panel = SessionPanel(self._session_service, self)
+        self._session_panel.show()
+        self.session_btn.setText("⚔️ Sessão Ativa")
+        self.session_btn.setStyleSheet("background-color:#2E7D32; color:white; font-weight:bold;")
+
+        # Conecta o painel ao DiceHistoryWindow para publicar rolagens locais
+        if hasattr(self.sheet_tab, 'dice_history') and self.sheet_tab.dice_history:
+            self.sheet_tab.dice_history.session_panel = self._session_panel
+
     def on_character_updated(self):
         """Atualiza a ficha quando o personagem é modificado"""
         self.sheet_tab.update_display()

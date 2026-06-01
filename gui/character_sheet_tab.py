@@ -1517,31 +1517,6 @@ class CharacterSheetTab(QWidget):
             separator.setStyleSheet("background-color: #D2B48C; max-height: 1px;")
             self.features_container_layout.addWidget(separator)
 
-    def check_and_select_pact_boon(self, level: int):
-        """Warlocks escolhem um Pact Boon no nível 3."""
-        if not self.character.character_class:
-            return
-
-        if self.character.character_class.name != "Warlock":
-            return
-
-        if level < 3 or self.character.pact_boon:
-            return
-
-        dialog = PactBoonDialog(self)
-        if dialog.exec():
-            selected_boon = dialog.get_selected_boon()
-            if selected_boon:
-                self.character.pact_boon = selected_boon
-                self.update_display()
-                self.character_updated.emit()
-                QMessageBox.information(
-                    self,
-                    "Pact Boon escolhido",
-                    f"Seu patrono concedeu a dádiva: <b>{selected_boon}</b>.\n\n"
-                    "Esta escolha desbloqueia novas invocações e habilidades."
-                )
-        
         # Adiciona Subclasse se existir
         if self.character.subclass_name:
             from models import SubclassDatabase
@@ -1606,17 +1581,29 @@ class CharacterSheetTab(QWidget):
                 self.features_container_layout.addWidget(separator)
 
         # Adiciona Feats se existirem
-        if self.character.feats:
+        displayed_feats = list(self.character.feats) if self.character.feats else []
+        racial_feat = getattr(self.character, 'racial_bonus_feat', None)
+        if racial_feat and racial_feat not in displayed_feats:
+            displayed_feats.append(racial_feat)
+
+        if displayed_feats:
             from models.feats import get_feat
 
-            for feat_name in self.character.feats:
+            for feat_name in displayed_feats:
                 feat_layout = QHBoxLayout()
                 feat_layout.setContentsMargins(0, 0, 0, 0)
                 feat_layout.setSpacing(5)
 
-                feat_label = QLabel(f"⭐ Feat: {feat_name}")
+                if racial_feat and feat_name == racial_feat:
+                    feat_prefix = "🌟 Feat Racial"
+                    feat_color = "#B8860B"
+                else:
+                    feat_prefix = "⭐ Feat"
+                    feat_color = "#DAA520"
+
+                feat_label = QLabel(f"{feat_prefix}: {feat_name}")
                 feat_label.setFont(QFont("Georgia", 10, QFont.Weight.Bold))
-                feat_label.setStyleSheet("background-color: transparent; color: #DAA520;")
+                feat_label.setStyleSheet(f"background-color: transparent; color: {feat_color};")
                 feat_layout.addWidget(feat_label)
 
                 feat_layout.addStretch()
@@ -1653,7 +1640,32 @@ class CharacterSheetTab(QWidget):
             separator.setFrameShape(QFrame.Shape.HLine)
             separator.setStyleSheet("background-color: #D2B48C; max-height: 1px;")
             self.features_container_layout.addWidget(separator)
-        
+
+    def check_and_select_pact_boon(self, level: int):
+        """Warlocks escolhem um Pact Boon no nível 3."""
+        if not self.character.character_class:
+            return
+
+        if self.character.character_class.name != "Warlock":
+            return
+
+        if level < 3 or self.character.pact_boon:
+            return
+
+        dialog = PactBoonDialog(self)
+        if dialog.exec():
+            selected_boon = dialog.get_selected_boon()
+            if selected_boon:
+                self.character.pact_boon = selected_boon
+                self.update_display()
+                self.character_updated.emit()
+                QMessageBox.information(
+                    self,
+                    "Pact Boon escolhido",
+                    f"Seu patrono concedeu a dádiva: <b>{selected_boon}</b>.\n\n"
+                    "Esta escolha desbloqueia novas invocações e habilidades."
+                )
+
     def check_and_select_eldritch_invocations(self, level: int):
         """Garante que Warlocks escolham novas Eldritch Invocations no nível correto."""
         if not self.character.character_class or self.character.character_class.name != "Warlock":

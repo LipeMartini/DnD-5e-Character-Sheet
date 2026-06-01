@@ -103,6 +103,22 @@ class RaceDatabase:
                 languages=['Common', 'Infernal'],
                 traits=['Darkvision', 'Hellish Resistance', 'Infernal Legacy']
             ),
+            'Variant Human': Race(
+                name='Variant Human',
+                ability_bonuses={},  # +1 em dois atributos à escolha (aplicado via racial_ability_choices)
+                speed=30,
+                size='Medium',
+                languages=['Common', 'One extra language'],
+                traits=['Variant Human Feat', 'Variant Human Skills']
+            ),
+            'Custom Lineage': Race(
+                name='Custom Lineage',
+                ability_bonuses={},  # +2 em um atributo à escolha (aplicado via racial_ability_choices)
+                speed=30,
+                size='Medium',
+                languages=['Common'],
+                traits=['Custom Lineage Feat', 'Custom Lineage Variable Trait']
+            ),
         }
     
     @staticmethod

@@ -13,6 +13,7 @@ class DiceHistoryWindow(QWidget):
         super().__init__()
         self.setWindowTitle("Rolagens")
         self.resize(500, 600)
+        self.session_panel = None  # Definido pelo MainWindow quando uma sessão está ativa
         self.init_ui()
         self.apply_theme()
     
@@ -130,7 +131,7 @@ class DiceHistoryWindow(QWidget):
         # Mensagem inicial
         self.add_entry("Histórico de rolagens iniciado.", "INFO")
     
-    def add_entry(self, message: str, roll_type: str = "ROLL"):
+    def add_entry(self, message: str, roll_type: str = "ROLL", _skip_session: bool = False):
         """Adiciona uma entrada ao histórico
         
         Args:
@@ -172,7 +173,13 @@ class DiceHistoryWindow(QWidget):
         # Auto-scroll para o final
         scrollbar = self.history_text.verticalScrollBar()
         scrollbar.setValue(scrollbar.maximum())
-    
+
+        if self.session_panel and roll_type not in ("INFO",) and not _skip_session:
+            plain = re.sub(r'<[^>]+>', '', message).strip()
+            nums  = re.findall(r'\d+', plain)
+            result = int(nums[-1]) if nums else 0
+            self.session_panel.publish_roll(roll_type, plain, result)
+
     def add_roll(self, roll_name: str, roll_value: int, modifier: int, total: int, roll_type: str = "ROLL"):
         """Adiciona uma rolagem formatada ao histórico"""
         mod_sign = '+' if modifier >= 0 else ''
@@ -186,7 +193,13 @@ class DiceHistoryWindow(QWidget):
             dice_display = str(roll_value)
         
         message = f"<b>{roll_name}</b>: 🎲 {dice_display} {mod_sign}{modifier} = <b>{total}</b>"
-        self.add_entry(message, roll_type)
+        self.add_entry(message, roll_type, _skip_session=True)
+
+        if self.session_panel:
+            mod_str = f"{mod_sign}{modifier}" if modifier != 0 else ""
+            expression = f"{roll_name} d20{mod_str}" if not mod_str else f"{roll_name} {mod_str}"
+            breakdown = f"🎲 {roll_value} {mod_sign}{modifier}"
+            self.session_panel.publish_roll(roll_type, expression, total, breakdown)
     
     def add_custom_roll(self, roll_name: str, formatted_result: str):
         """Adiciona uma rolagem customizada (manual) ao histórico"""
@@ -246,7 +259,10 @@ class DiceHistoryWindow(QWidget):
             
             # Adicionar ao histórico
             self.add_entry(result, "MANUAL")
-            
+
+            if self.session_panel:
+                self.session_panel.publish_roll("MANUAL", expression, total, f"🎲 {rolls_str}")
+
             # Limpar campo
             self.manual_dice_input.clear()
             self.manual_dice_input.setFocus()
@@ -265,7 +281,9 @@ class DiceHistoryWindow(QWidget):
         self.add_entry("Histórico limpo.", "INFO")
     
     def show_and_raise(self):
-        """Mostra a janela e traz para frente"""
+        """Mostra a janela e traz para frente (suprimido se há sessão ativa)"""
+        if self.session_panel:
+            return
         self.show()
         self.raise_()
         self.activateWindow()

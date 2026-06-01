@@ -8,11 +8,13 @@ from models.expertise_rules import get_expertise_choices_for_level
 from .expertise_selection_dialog import ExpertiseSelectionDialog
 from .optional_content_dialog import OptionalContentDialog
 from .ranger_optional_features_dialog import apply_ranger_optional_features
+from .variant_race_dialog import VariantRaceDialog
 
 class CharacterCreationDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.character = Character()
+        self._pending_racial_feat = None  # Feat escolhido por Variant Human / Custom Lineage
         self.setWindowTitle("Criar Novo Personagem")
         self.setModal(True)
         self.resize(900, 700)
@@ -248,8 +250,47 @@ class CharacterCreationDialog(QDialog):
             subraces = SubraceDatabase.get_subraces_for_race(race_name)
             if subraces:
                 self.subrace_combo.addItems(list(subraces.keys()))
+
+            if race_name in ('Variant Human', 'Custom Lineage'):
+                self._handle_variant_race(race_name)
+            else:
+                # Saindo de uma raça variante: limpa bônus personalizados
+                self._pending_racial_feat = None
+                self.character.racial_ability_choices = {}
+                self.character.racial_bonus_feat = None
+
             self.update_stats_display()
     
+    def _handle_variant_race(self, race_name: str):
+        """Abre o dialog de escolhas para Variant Human / Custom Lineage."""
+        # Limpa escolhas anteriores se o jogador trocou de raça
+        self.character.racial_ability_choices = {}
+        self.character.racial_bonus_feat = None
+        self._pending_racial_feat = None
+
+        dlg = VariantRaceDialog(race_name, self.character, self)
+        if dlg.exec():
+            results = dlg.get_results()
+
+            # Aplica bônus de atributos escolhidos
+            self.character.racial_ability_choices = results['ability_bonuses']
+            self.character.recalculate_stats()
+
+            # Péricia extra
+            skill = results.get('skill')
+            if skill and skill not in self.character.skill_proficiencies:
+                self.character.skill_proficiencies.append(skill)
+
+            # Darkvision (Custom Lineage)
+            if results.get('darkvision') and 'Darkvision' not in self.character.traits:
+                self.character.traits.append('Darkvision')
+
+            # Armazena feat para aplicar na finalização
+            self._pending_racial_feat = results
+        else:
+            # Usuário cancelou — limpa a seleção de raça
+            self.race_combo.setCurrentIndex(0)
+
     def on_subrace_changed(self, subrace_name: str):
         if subrace_name:
             self.character.set_subrace(subrace_name)
@@ -380,7 +421,34 @@ class CharacterCreationDialog(QDialog):
         
         # Combinar todas as perícias
         self.character.skill_proficiencies = selected_class_skills + selected_subrace_skills + background_skills
-        
+
+        # Adicionar perícia racial de Variant Human / Custom Lineage (se ainda não adicionada)
+        if self._pending_racial_feat:
+            skill = self._pending_racial_feat.get('skill')
+            if skill and skill not in self.character.skill_proficiencies:
+                self.character.skill_proficiencies.append(skill)
+
+        # Aplicar feat racial (Variant Human / Custom Lineage)
+        self.character.racial_bonus_feat = None
+        if self._pending_racial_feat and self._pending_racial_feat.get('feat'):
+            feat_data = self._pending_racial_feat['feat']
+            if not feat_data.is_asi:
+                if feat_data.name not in self.character.feats:
+                    self.character.feats.append(feat_data.name)
+                self.character.racial_bonus_feat = feat_data.name
+
+                # Half-feat: bônus de atributo
+                half_stat = self._pending_racial_feat.get('feat_half_ability')
+                if half_stat:
+                    current = getattr(self.character.base_stats, half_stat, 10)
+                    setattr(self.character.base_stats, half_stat, min(current + 1, 20))
+                    self.character.recalculate_stats()
+
+                # Magic Initiate
+                mi = self._pending_racial_feat.get('feat_magic_initiate')
+                if mi:
+                    self.character.add_magic_initiate_choice(mi)
+
         # Adicionar class features do nível 1 (e opcionais de Tasha's)
         if self.character.character_class:
             new_features = self.character.add_class_features(

@@ -5,6 +5,10 @@ Descrições detalhadas de traços raciais, de classe e de background para toolt
 TRAIT_DESCRIPTIONS = {
     # Traços Raciais - Humano
     'Versatile': 'Humanos são adaptáveis e versáteis, ganhando +1 em todos os atributos.',
+    'Variant Human Feat': 'Você ganha um Feat de nível 1 à sua escolha, desde que atenda aos pré-requisitos.',
+    'Variant Human Skills': 'Você ganha proficiência em uma perícia de sua escolha.',
+    'Custom Lineage Feat': 'Você ganha um Feat de nível 1 à sua escolha (Tasha\'s Cauldron of Everything).',
+    'Custom Lineage Variable Trait': 'Você ganha proficiência em uma perícia OU Visão no Escuro com alcance de 9 metros (30 pés).',
     
     # Traços Raciais - Elfo
     'Darkvision': 'Você pode enxergar na penumbra a até 18 metros como se fosse luz plena, e no escuro como se fosse penumbra. Você não pode discernir cores no escuro, apenas tons de cinza.',

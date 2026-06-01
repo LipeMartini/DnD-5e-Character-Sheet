@@ -66,6 +66,12 @@ class Character:
     
     # Feats (Talentos)
     feats: List[str] = field(default_factory=list)
+
+    # Feat bônus recebido por raça variante (Variant Human / Custom Lineage)
+    racial_bonus_feat: Optional[str] = None
+
+    # Bônus de atributos escolhidos pelo jogador (Variant Human, Custom Lineage)
+    racial_ability_choices: Dict[str, int] = field(default_factory=dict)
     
     # Subclass (Arquétipo de classe)
     subclass_name: Optional[str] = None
@@ -103,6 +109,10 @@ class Character:
         # Aplica bônus subraciais
         if self.subrace:
             self.stats.apply_racial_bonuses(self.subrace.ability_bonuses)
+
+        # Aplica bônus de atributos escolhidos pelo jogador (Variant Human / Custom Lineage)
+        if self.racial_ability_choices:
+            self.stats.apply_racial_bonuses(self.racial_ability_choices)
     
     def apply_racial_proficiencies(self):
         """Aplica proficiências de armas e armaduras baseadas em traits raciais"""
@@ -760,9 +770,11 @@ class Character:
             'eldritch_invocations': self.eldritch_invocations,
             'pact_boon': self.pact_boon,
             'feats': self.feats,
+            'racial_bonus_feat': self.racial_bonus_feat,
             'subclass_name': self.subclass_name,
             'notes': self.notes,
             'magic_initiate_choices': self.magic_initiate_choices,
+            'racial_ability_choices': self.racial_ability_choices,
         }
     
     @classmethod
@@ -823,9 +835,11 @@ class Character:
         char.eldritch_invocations = data.get('eldritch_invocations', [])
         char.pact_boon = data.get('pact_boon')
         char.feats = data.get('feats', [])
+        char.racial_bonus_feat = data.get('racial_bonus_feat')
         char.subclass_name = data.get('subclass_name')
         char.notes = data.get('notes', {})
         char.magic_initiate_choices = data.get('magic_initiate_choices', [])
+        char.racial_ability_choices = data.get('racial_ability_choices', {})
         
         return char
     

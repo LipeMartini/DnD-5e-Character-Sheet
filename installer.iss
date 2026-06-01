@@ -1,11 +1,11 @@
-; Script Inno Setup para D&D Character Sheet
+; Script Inno Setup para D&D Companion
 ; Certifique-se de ter o Inno Setup instalado: https://jrsoftware.org/isdl.php
 
-#define MyAppName "D&D Character Sheet"
+#define MyAppName "D&D Companion"
 #define MyAppVersion "1.0.0"
 #define MyAppPublisher "Lipe Martini"
 #define MyAppURL "https://lipemartini.github.io/DnD-5e-Character-Sheet/"
-#define MyAppExeName "DnD Character Sheet.exe"
+#define MyAppExeName "DnD Companion.exe"
 
 [Setup]
 ; Informações básicas do aplicativo
@@ -23,7 +23,7 @@ LicenseFile=
 InfoBeforeFile=
 InfoAfterFile=
 OutputDir=installer_output
-OutputBaseFilename=DnD_Character_Sheet_Setup
+OutputBaseFilename=DnD_Companion_Setup
 SetupIconFile=
 Compression=lzma
 SolidCompression=yes
